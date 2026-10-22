@@ -46,6 +46,10 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
-# User data uploads (keep data structure)
+# User data, personal CV, applications and local AI memory
+data/*.json
+data/*.txt
 data/uploads/*
 !data/uploads/.gitkeep
+!data/.gitkeep
+test_clean_parse.py
