@@ -64,7 +64,39 @@ export interface JobPosting {
   posted_at?: string;
   discovered_at: string;
   fit_score?: number;
-  status: 'discovered' | 'saved' | 'applied' | 'interviewing' | 'rejected' | 'archived';
+  status: 'discovered' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'rejected' | 'archived';
+  notes?: string;
+  outcome?: string;
+  outcome_notes?: string;
+  outcome_success?: boolean;
+  applied_date?: string;
+  upskill_recommendations?: string[];
+}
+
+export interface OutcomeSubmission {
+  job_id: string;
+  status: 'applied' | 'interviewing' | 'offer' | 'rejected';
+  was_successful: boolean;
+  reason?: string;
+  feedback_details?: string;
+}
+
+export interface StudyTopic {
+  topic: string;
+  description: string;
+  suggested_resources: string;
+  estimated_time: string;
+}
+
+export interface UpskillPlan {
+  job_title: string;
+  company: string;
+  was_successful: boolean;
+  strategy_adjustment: string;
+  skill_gaps: string[];
+  study_plan: StudyTopic[];
+  recommended_certifications: string[];
+  actionable_next_steps: string[];
 }
 
 export interface FitDimensionScore {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Radar, User, FileText, Brain, Sparkles, Settings as SettingsIcon, Sun, Moon } from 'lucide-react';
+import { Radar, User, FileText, Brain, Sparkles, Settings as SettingsIcon, Sun, Moon, Kanban } from 'lucide-react';
 
 interface NavbarProps {
   activeTab: string;
@@ -20,10 +20,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const tabs = [
     { id: 'radar', label: 'Radar de Empleo', icon: Radar },
+    { id: 'tracker', label: 'Seguimiento & Estrategia', icon: Kanban },
     { id: 'profile', label: 'Perfil & CV', icon: User },
     { id: 'applications', label: 'Adaptador & Postulaciones', icon: FileText },
     { id: 'interview', label: 'Coach Entrevistas', icon: Sparkles },
-    { id: 'preferences', label: 'Aprendizaje & Memoria', icon: Brain },
+    { id: 'preferences', label: 'Memoria & IA', icon: Brain },
   ];
 
   return (

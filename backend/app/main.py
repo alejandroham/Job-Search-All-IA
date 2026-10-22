@@ -9,7 +9,8 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.models.schemas import (
     CandidateProfile, UserPreferences, JobPosting, 
-    FitEvaluation, ApplicationDraft, FeedbackAction, LLMConfig
+    FitEvaluation, ApplicationDraft, FeedbackAction, LLMConfig,
+    OutcomeSubmission, UpskillPlan
 )
 from app.storage.db import db
 from app.agents.profile_analyzer import extract_text_from_file, analyze_cv_content
@@ -17,6 +18,7 @@ from app.agents.fit_evaluator import fit_evaluator
 from app.agents.drafter_reviewer import drafter_reviewer
 from app.agents.preference_learner import preference_learner
 from app.agents.interview_coach import interview_coach
+from app.agents.outcome_agent import outcome_agent
 from app.agents.llm_provider import llm
 from app.scrapers.remote_boards import RemoteBoardsScraper
 from app.scrapers.linkedin_guest import LinkedInGuestScraper
@@ -148,6 +150,35 @@ def batch_rank_jobs():
 
     return {"message": f"{evaluated_count} ofertas evaluadas y ordenadas por ajuste."}
 
+@app.delete("/api/jobs/{job_id}")
+def delete_job(job_id: str):
+    db.delete_job(job_id)
+    return {"message": "Oportunidad eliminada exitosamente"}
+
+@app.delete("/api/jobs")
+def clear_all_jobs():
+    db.clear_jobs()
+    return {"message": "Radar limpiado exitosamente"}
+
+@app.put("/api/jobs/{job_id}/status")
+def update_job_status_endpoint(job_id: str, data: dict):
+    new_status = data.get("status", "saved")
+    job = db.get_job_by_id(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Empleo no encontrado")
+    db.update_job_status(job_id, status=new_status)
+    return {"message": f"Estado actualizado a {new_status}"}
+
+@app.post("/api/jobs/{job_id}/outcome", response_model=UpskillPlan)
+def register_job_outcome(job_id: str, submission: OutcomeSubmission):
+    job = db.get_job_by_id(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Empleo no encontrado")
+    profile = db.get_profile()
+    prefs = db.get_preferences()
+    plan = outcome_agent.process_outcome(submission, job, profile, prefs)
+    return plan
+
 # --- Drafter-Reviewer Application Endpoints ---
 
 @app.post("/api/jobs/{job_id}/apply", response_model=ApplicationDraft)
@@ -167,6 +198,11 @@ def list_applications():
 @app.get("/api/applications/{job_id}", response_model=Optional[ApplicationDraft])
 def get_application(job_id: str):
     return db.get_application_by_job_id(job_id)
+
+@app.delete("/api/applications/{job_id}")
+def delete_application_endpoint(job_id: str):
+    db.delete_application(job_id)
+    return {"message": "Postulación eliminada exitosamente"}
 
 # --- Interview Coach Endpoints ---
 

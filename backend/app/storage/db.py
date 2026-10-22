@@ -104,6 +104,13 @@ class Database:
                 break
         self._write_json(settings.JOBS_FILE, [j.model_dump() for j in jobs])
 
+    def delete_job(self, job_id: str):
+        jobs = [j for j in self.get_jobs() if j.id != job_id]
+        self._write_json(settings.JOBS_FILE, [j.model_dump() for j in jobs])
+
+    def clear_jobs(self):
+        self._write_json(settings.JOBS_FILE, [])
+
     # Applications
     def get_applications(self) -> List[ApplicationDraft]:
         raw = self._read_json(settings.APPLICATIONS_FILE) or []
@@ -113,6 +120,10 @@ class Database:
         apps = self.get_applications()
         apps = [a for a in apps if a.job_id != app.job_id]
         apps.append(app)
+        self._write_json(settings.APPLICATIONS_FILE, [a.model_dump() for a in apps])
+
+    def delete_application(self, app_id: str):
+        apps = [a for a in self.get_applications() if a.id != app_id and a.job_id != app_id]
         self._write_json(settings.APPLICATIONS_FILE, [a.model_dump() for a in apps])
 
     def get_application_by_job_id(self, job_id: str) -> Optional[ApplicationDraft]:

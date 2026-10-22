@@ -13,7 +13,8 @@ import {
   Briefcase,
   DollarSign,
   ChevronRight,
-  Filter
+  Filter,
+  Trash2
 } from 'lucide-react';
 import type { JobPosting, FitEvaluation } from '../types';
 import { api } from '../api';
@@ -99,6 +100,25 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, onRefresh, onApply }) 
     }
   };
 
+  const handleDeleteJob = async (jobId: string) => {
+    try {
+      await api.deleteJob(jobId);
+      onRefresh();
+    } catch (e) {
+      alert('Error eliminando empleo: ' + e);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!window.confirm('¿Deseas vaciar todo el radar de empleos?')) return;
+    try {
+      await api.clearAllJobs();
+      onRefresh();
+    } catch (e) {
+      alert('Error limpiando radar: ' + e);
+    }
+  };
+
   const filteredJobs = jobs.filter(j => {
     const term = searchTerm.toLowerCase();
     const matchesTerm = !term || j.title.toLowerCase().includes(term) || j.company.toLowerCase().includes(term) || j.tags.some(t => t.toLowerCase().includes(term));
@@ -160,6 +180,17 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, onRefresh, onApply }) 
               <CheckCircle className={`w-3.5 h-3.5 text-emerald-500 ${isBatchRanking ? 'animate-pulse' : ''}`} />
               <span>{isBatchRanking ? 'Evaluando...' : 'Evaluar Ajuste Masivo'}</span>
             </button>
+
+            {/* Clear All Button */}
+            {jobs.length > 0 && (
+              <button
+                onClick={handleClearAll}
+                className="p-2 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-zinc-800 transition"
+                title="Limpiar todas las ofertas del radar"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
         </div>
@@ -331,6 +362,15 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, onRefresh, onApply }) 
                           <ExternalLink className="w-4 h-4" />
                         </a>
                       )}
+
+                      {/* Delete Job Button */}
+                      <button
+                        onClick={() => handleDeleteJob(job.id)}
+                        title="Eliminar esta oferta del radar"
+                        className="p-1.5 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-zinc-800 transition"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
 
                       {/* Drafter / Apply */}
                       <button

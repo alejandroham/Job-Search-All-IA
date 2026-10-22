@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { JobRadar } from './components/JobRadar';
+import { PipelineTracker } from './components/PipelineTracker';
 import { ProfileStudio } from './components/ProfileStudio';
 import { ApplicationStudio } from './components/ApplicationStudio';
 import { PreferencesCenter } from './components/PreferencesCenter';
@@ -107,6 +108,19 @@ export function App() {
           <div className="animate-fade-in">
             {activeTab === 'radar' && (
               <JobRadar
+                jobs={jobs}
+                onRefresh={async () => {
+                  const updated = await api.getJobs();
+                  setJobs(updated);
+                  const updatedPrefs = await api.getPreferences();
+                  setPreferences(updatedPrefs);
+                }}
+                onApply={handleApplyToJob}
+              />
+            )}
+
+            {activeTab === 'tracker' && (
+              <PipelineTracker
                 jobs={jobs}
                 onRefresh={async () => {
                   const updated = await api.getJobs();

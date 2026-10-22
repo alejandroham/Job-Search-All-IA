@@ -65,6 +65,30 @@ export const api = {
     const res = await fetch(url);
     return res.json();
   },
+  deleteJob: async (job_id: string): Promise<{ message: string }> => {
+    const res = await fetch(`${API_BASE}/jobs/${job_id}`, { method: 'DELETE' });
+    return res.json();
+  },
+  clearAllJobs: async (): Promise<{ message: string }> => {
+    const res = await fetch(`${API_BASE}/jobs`, { method: 'DELETE' });
+    return res.json();
+  },
+  updateJobStatus: async (job_id: string, status: string): Promise<{ message: string }> => {
+    const res = await fetch(`${API_BASE}/jobs/${job_id}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+    return res.json();
+  },
+  submitOutcome: async (submission: any): Promise<any> => {
+    const res = await fetch(`${API_BASE}/jobs/${submission.job_id}/outcome`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(submission)
+    });
+    return res.json();
+  },
   scrapeJobs: async (keywords?: string, remote_only: boolean = true) => {
     const res = await fetch(`${API_BASE}/jobs/scrape?remote_only=${remote_only}${keywords ? `&keywords=${encodeURIComponent(keywords)}` : ''}`, {
       method: 'POST'
@@ -110,6 +134,10 @@ export const api = {
   getApplicationByJob: async (job_id: string): Promise<ApplicationDraft | null> => {
     const res = await fetch(`${API_BASE}/applications/${job_id}`);
     if (res.status === 404) return null;
+    return res.json();
+  },
+  deleteApplication: async (job_id: string): Promise<{ message: string }> => {
+    const res = await fetch(`${API_BASE}/applications/${job_id}`, { method: 'DELETE' });
     return res.json();
   },
 
