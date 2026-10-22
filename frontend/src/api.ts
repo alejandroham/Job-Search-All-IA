@@ -89,8 +89,12 @@ export const api = {
     });
     return res.json();
   },
-  scrapeJobs: async (keywords?: string, remote_only: boolean = true) => {
-    const res = await fetch(`${API_BASE}/jobs/scrape?remote_only=${remote_only}${keywords ? `&keywords=${encodeURIComponent(keywords)}` : ''}`, {
+  scrapeJobs: async (keywords?: string, remote_only: boolean = true, scope: string = 'global') => {
+    const params = new URLSearchParams();
+    params.set('remote_only', String(remote_only));
+    params.set('scope', scope);
+    if (keywords) params.set('keywords', keywords);
+    const res = await fetch(`${API_BASE}/jobs/scrape?${params.toString()}`, {
       method: 'POST'
     });
     return res.json();

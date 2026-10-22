@@ -23,6 +23,7 @@ from app.agents.llm_provider import llm
 from app.scrapers.remote_boards import RemoteBoardsScraper
 from app.scrapers.linkedin_guest import LinkedInGuestScraper
 from app.scrapers.url_parser import extract_job_from_url
+from app.scrapers.chile_portals import ChilePortalsScraper
 
 app = FastAPI(title="NexusJob AI API", version=settings.VERSION)
 
@@ -83,24 +84,62 @@ def list_jobs(status: Optional[str] = None):
     return db.get_jobs(status=status)
 
 @app.post("/api/jobs/scrape")
-def trigger_scrape(keywords: Optional[str] = None, remote_only: bool = True):
+def trigger_scrape(keywords: Optional[str] = None, remote_only: bool = True, scope: str = "global"):
+    """
+    Scrape job postings from multiple sources.
+    
+    Params:
+      - keywords: role or technology to search for
+      - remote_only: filter only remote positions
+      - scope: "global" | "chile" | "all"
+          global  → remote-friendly international boards (Arbeitnow, Remotive, RemoteOK, LinkedIn Global)
+          chile   → Chilean portals (GetOnBoard, LinkedIn Chile, CompuTrabajo, ChileTrabajos, Laborum)
+          all     → both international + Chilean portals
+    """
     prefs = db.get_preferences()
     kw = keywords or (prefs.target_roles[0] if prefs.target_roles else "Software Engineer")
-    
-    # 1. Fetch from Remote boards
-    remote_scraper = RemoteBoardsScraper()
-    jobs = remote_scraper.search(keywords=kw, remote_only=remote_only, limit=20)
-    
-    # 2. Fetch from LinkedIn Guest
-    try:
-        linkedin_scraper = LinkedInGuestScraper()
-        li_jobs = linkedin_scraper.search(keywords=kw, remote_only=remote_only, limit=10)
-        jobs.extend(li_jobs)
-    except Exception:
-        pass
+    jobs: list = []
+
+    # ── International / Global remote boards ────────────────────────────────
+    if scope in ("global", "all"):
+        try:
+            remote_scraper = RemoteBoardsScraper()
+            global_jobs = remote_scraper.search(keywords=kw, remote_only=remote_only, limit=20)
+            jobs.extend(global_jobs)
+        except Exception as e:
+            import logging; logging.getLogger(__name__).warning(f"Remote boards error: {e}")
+
+        try:
+            linkedin_scraper = LinkedInGuestScraper()
+            li_jobs = linkedin_scraper.search(keywords=kw, remote_only=remote_only, limit=8)
+            jobs.extend(li_jobs)
+        except Exception:
+            pass
+
+    # ── Chilean Portals ──────────────────────────────────────────────────────
+    if scope in ("chile", "all"):
+        try:
+            chile_scraper = ChilePortalsScraper()
+            # For Chilean portals, remote_only=False by default to include presential/hybrid
+            chile_remote = remote_only if scope == "chile" else False
+            chile_jobs = chile_scraper.search(keywords=kw, remote_only=chile_remote, limit=40)
+            jobs.extend(chile_jobs)
+        except Exception as e:
+            import logging; logging.getLogger(__name__).warning(f"Chile portals error: {e}")
 
     added = db.save_jobs(jobs)
-    return {"message": f"Radar actualizado con {len(jobs)} vacantes ({added} nuevas).", "total_fetched": len(jobs), "new_added": added}
+    scope_labels = {
+        "global": "portales internacionales remotos",
+        "chile": "portales chilenos (GetOnBoard, LinkedIn Chile, CompuTrabajo, ChileTrabajos, Laborum)",
+        "all": "portales globales + chilenos"
+    }
+    return {
+        "message": f"Radar actualizado — {scope_labels.get(scope, scope)}: {len(jobs)} vacantes encontradas ({added} nuevas).",
+        "total_fetched": len(jobs),
+        "new_added": added,
+        "scope": scope,
+        "sources": list({j.source for j in jobs})
+    }
 
 @app.post("/api/jobs/import-url")
 def import_job_from_url(data: dict):

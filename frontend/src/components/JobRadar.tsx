@@ -34,7 +34,10 @@ interface JobRadarProps {
 
 export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, onApply }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [remoteOnly, setRemoteOnly] = useState(true);
+  const [remoteOnly, setRemoteOnly] = useState(false);
+  const [searchScope, setSearchScope] = useState<'global' | 'chile' | 'all'>(() => {
+    return (localStorage.getItem('job_radar_scope') as 'global' | 'chile' | 'all') || 'all';
+  });
   const [isScraping, setIsScraping] = useState(false);
   const [isBatchRanking, setIsBatchRanking] = useState(false);
   const [importUrl, setImportUrl] = useState('');
@@ -65,10 +68,26 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
     return null;
   };
 
+  const formatSource = (src: string): string => {
+    const map: Record<string, string> = {
+      getonbrd: '🇨🇱 Get on Board',
+      linkedin_chile: '🇨🇱 LinkedIn CL',
+      computrabajo: '🇨🇱 CompuTrabajo',
+      chiletrabajos: '🇨🇱 ChileTrabajos',
+      laborum: '🇨🇱 Laborum',
+      remotive: '🌍 Remotive',
+      arbeitnow: '🌍 Arbeitnow',
+      remoteok: '🌍 RemoteOK',
+      linkedin: '🌍 LinkedIn',
+      url_import: '🔗 Importado'
+    };
+    return map[src] || src;
+  };
+
   const handleScrape = async () => {
     setIsScraping(true);
     try {
-      await api.scrapeJobs(searchTerm, remoteOnly);
+      await api.scrapeJobs(searchTerm, remoteOnly, searchScope);
       onRefresh();
     } catch (e) {
       alert('Error al buscar empleos: ' + e);
@@ -226,13 +245,13 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white flex items-center space-x-2">
-              <span>Radar de Búsqueda Global</span>
+              <span>Radar de Búsqueda (Chile & Global)</span>
               <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-medium">
                 En vivo
               </span>
             </h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Descubrimiento autónomo de empleos remotos, evaluación de compatibilidad y postulación en 1 clic.
+              Búsqueda en portales chilenos (GetOnBoard, LinkedIn Chile, CompuTrabajo, ChileTrabajos, Laborum) y globales. Admite modalidades presencial, híbrida y remota.
             </p>
           </div>
 
@@ -269,30 +288,90 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
           </div>
         </div>
 
-        {/* Search & Filters */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+        {/* Scope Selector: Chile, Global, or Ambos */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-black/5 dark:border-white/5">
+          <div className="flex items-center space-x-1.5">
+            <span className="text-xs font-medium text-gray-700 dark:text-gray-300 mr-1">Alcance:</span>
+            <div className="inline-flex rounded-xl p-1 bg-gray-100 dark:bg-zinc-800/80 border border-black/5 dark:border-white/5 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchScope('chile');
+                  localStorage.setItem('job_radar_scope', 'chile');
+                }}
+                className={`px-3 py-1.5 rounded-lg font-medium transition ${
+                  searchScope === 'chile'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+                title="Buscar en GetOnBoard, LinkedIn Chile, CompuTrabajo, ChileTrabajos y Laborum"
+              >
+                🇨🇱 Solo Chile
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchScope('global');
+                  localStorage.setItem('job_radar_scope', 'global');
+                }}
+                className={`px-3 py-1.5 rounded-lg font-medium transition ${
+                  searchScope === 'global'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+                title="Buscar en portales internacionales remotos"
+              >
+                🌍 Global Remoto
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchScope('all');
+                  localStorage.setItem('job_radar_scope', 'all');
+                }}
+                className={`px-3 py-1.5 rounded-lg font-medium transition ${
+                  searchScope === 'all'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+                title="Escanear simultáneamente Chile + Global"
+              >
+                🌐 Ambos (Chile + Global)
+              </button>
+            </div>
+          </div>
+
+          {/* Modality Filter */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setRemoteOnly(!remoteOnly)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 ${
+                remoteOnly
+                  ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-500/30 text-blue-600 dark:text-blue-400'
+                  : 'bg-gray-100/70 dark:bg-zinc-800/60 border-black/5 dark:border-white/5 text-gray-600 dark:text-gray-400'
+              }`}
+              title="Alternar entre ver solo remoto o todas las modalidades (presencial, híbrido y remoto)"
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>{remoteOnly ? 'Modalidad: Solo Remoto' : 'Modalidad: Todas (Presencial + Híbrido + Remoto)'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Keyword Search Input */}
+        <div className="flex flex-col sm:flex-row items-center gap-3">
           <div className="relative flex-1 w-full">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Filtrar por rol, empresa o tecnología (ej. DevOps, Python, React)..."
+              placeholder="Buscar por cargo, palabra clave o tecnología (ej. Administrador de Redes, DevOps, Python, Soporte)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 rounded-xl bg-gray-100/70 dark:bg-zinc-800/60 border border-black/5 dark:border-white/5 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition"
             />
           </div>
-
-          <button
-            onClick={() => setRemoteOnly(!remoteOnly)}
-            className={`w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-medium border transition flex items-center justify-center space-x-2 ${
-              remoteOnly
-                ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-500/30 text-blue-600 dark:text-blue-400'
-                : 'bg-gray-100/70 dark:bg-zinc-800/60 border-black/5 dark:border-white/5 text-gray-600 dark:text-gray-400'
-            }`}
-          >
-            <Filter className="w-3.5 h-3.5" />
-            <span>Sólo Remoto</span>
-          </button>
         </div>
 
         {/* URL Importer */}
@@ -413,8 +492,8 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
                     {/* Top Row: Tags + Fit Score */}
                     <div className="flex items-center justify-between gap-1.5 flex-wrap">
                       <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                          {job.source}
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 tracking-wide">
+                          {formatSource(job.source)}
                         </span>
 
                         {job.is_remote && (
