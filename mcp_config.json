@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "nexusjob-ai": {
+      "command": "python",
+      "args": [
+        "-m",
+        "app.mcp_server"
+      ],
+      "cwd": "${workspaceFolder}/backend",
+      "env": {
+        "PYTHONPATH": "backend",
+        "GEMINI_API_KEY": ""
+      }
+    }
+  }
+}
