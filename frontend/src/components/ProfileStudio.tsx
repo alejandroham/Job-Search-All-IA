@@ -221,7 +221,7 @@ export const ProfileStudio: React.FC<ProfileStudioProps> = ({ profile, onProfile
     <div className="space-y-6 max-w-5xl mx-auto">
       
       {/* Top Banner / Upload Zone */}
-      <div className="apple-glass apple-card p-6 text-center border-dashed border-2 border-gray-300 dark:border-zinc-700 hover:border-blue-500/50 transition">
+      <div className="no-print apple-glass apple-card p-6 text-center border-dashed border-2 border-gray-300 dark:border-zinc-700 hover:border-blue-500/50 transition">
         <input
           type="file"
           id="cv-upload"
@@ -255,7 +255,7 @@ export const ProfileStudio: React.FC<ProfileStudioProps> = ({ profile, onProfile
       </div>
 
       {/* Sub-Navigation (Apple Segmented Bar) */}
-      <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-2">
+      <div className="no-print flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-2">
         <div className="flex items-center bg-gray-200/50 dark:bg-zinc-800/60 p-1 rounded-xl">
           <button
             onClick={() => setActiveSubTab('editor')}
@@ -602,7 +602,7 @@ export const ProfileStudio: React.FC<ProfileStudioProps> = ({ profile, onProfile
 
       {/* --- TAB 2: PREVIEW FORMATTED CV (APPLE / ATS RENDER) --- */}
       {activeSubTab === 'preview' && (
-        <div className="apple-glass apple-card p-8 sm:p-12 space-y-8 bg-white dark:bg-[#1C1C1E] print:p-0 print:border-none print:shadow-none">
+        <div className="printable-cv apple-glass apple-card p-8 sm:p-12 space-y-8 bg-white dark:bg-[#1C1C1E] print:p-0 print:border-none print:shadow-none">
           
           {/* Header */}
           <div className="border-b border-gray-200 dark:border-zinc-800 pb-6 text-center sm:text-left space-y-2">
@@ -660,7 +660,7 @@ export const ProfileStudio: React.FC<ProfileStudioProps> = ({ profile, onProfile
             </h2>
             <div className="space-y-5">
               {editableProfile.experiences.map((exp, idx) => (
-                <div key={idx} className="space-y-1.5">
+                <div key={idx} className="cv-entry space-y-1.5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs font-semibold text-gray-900 dark:text-white">
                     <span>{exp.role} <span className="font-normal text-gray-500">— {exp.company}</span></span>
                     <span className="text-[11px] text-gray-400 font-normal">{exp.start_date} – {exp.end_date || 'Presente'}</span>
@@ -688,7 +688,7 @@ export const ProfileStudio: React.FC<ProfileStudioProps> = ({ profile, onProfile
               </h2>
               <div className="space-y-2">
                 {editableProfile.education.map((edu, idx) => (
-                  <div key={idx} className="flex justify-between items-center text-xs">
+                  <div key={idx} className="cv-entry flex justify-between items-center text-xs">
                     <span className="font-semibold text-gray-800 dark:text-gray-200">
                       {edu.degree} <span className="font-normal text-gray-500">— {edu.institution}</span>
                     </span>

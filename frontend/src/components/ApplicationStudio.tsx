@@ -48,7 +48,7 @@ export const ApplicationStudio: React.FC<ApplicationStudioProps> = ({ applicatio
     <div className="space-y-6">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white tracking-tight">
             Adaptador & Postulaciones (Drafter-Reviewer)
@@ -79,7 +79,7 @@ export const ApplicationStudio: React.FC<ApplicationStudioProps> = ({ applicatio
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* Applications Selector Sidebar */}
-          <div className="lg:col-span-4 space-y-2">
+          <div className="no-print lg:col-span-4 space-y-2">
             <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 px-1 mb-2">
               Postulaciones Listas
             </div>
@@ -119,7 +119,7 @@ export const ApplicationStudio: React.FC<ApplicationStudioProps> = ({ applicatio
             <div className="lg:col-span-8 space-y-4">
               
               {/* Document Actions Bar */}
-              <div className="apple-glass apple-card p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="no-print apple-glass apple-card p-4 flex flex-wrap items-center justify-between gap-3">
                 {/* Sub tabs: CV vs Cover Letter */}
                 <div className="flex items-center bg-gray-200/50 dark:bg-zinc-800/60 p-1 rounded-xl border border-black/5 dark:border-white/5">
                   <button
@@ -183,7 +183,7 @@ export const ApplicationStudio: React.FC<ApplicationStudioProps> = ({ applicatio
               </div>
 
               {/* Reviewer / ATS Critique Card */}
-              <div className="apple-glass apple-card p-4 space-y-2 border-emerald-500/20 bg-emerald-50/30 dark:bg-emerald-950/20">
+              <div className="no-print apple-glass apple-card p-4 space-y-2 border-emerald-500/20 bg-emerald-50/30 dark:bg-emerald-950/20">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-800 dark:text-emerald-300">
                     <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -205,7 +205,7 @@ export const ApplicationStudio: React.FC<ApplicationStudioProps> = ({ applicatio
               </div>
 
               {/* Main Document Content */}
-              <div className="apple-glass apple-card p-6 sm:p-8 min-h-[500px]">
+              <div className="printable-cv apple-glass apple-card p-6 sm:p-8 min-h-[500px]">
                 {subTab === 'cv' ? (
                   <div className="prose dark:prose-invert max-w-none text-xs leading-relaxed whitespace-pre-wrap font-mono bg-white dark:bg-zinc-950 p-6 rounded-xl border border-black/5 dark:border-white/5">
                     {selectedApp.tailored_cv_markdown}
