@@ -75,6 +75,7 @@ class JobPosting(BaseModel):
     outcome_notes: Optional[str] = None
     outcome_success: Optional[bool] = None
     applied_date: Optional[str] = None
+    contact_email: Optional[str] = None
     upskill_recommendations: List[str] = []
 
 class OutcomeSubmission(BaseModel):

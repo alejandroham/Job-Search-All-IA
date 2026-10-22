@@ -70,6 +70,7 @@ export interface JobPosting {
   outcome_notes?: string;
   outcome_success?: boolean;
   applied_date?: string;
+  contact_email?: string;
   upskill_recommendations?: string[];
 }
 
@@ -132,6 +133,10 @@ export interface ApplicationDraft {
 
 export interface LLMSettings {
   provider: 'gemini' | 'openai' | 'claude';
+  has_active_key: boolean;
+  active_model_name: string;
+  status_label: string;
+  status_color: 'green' | 'yellow';
   has_gemini_key: boolean;
   has_openai_key: boolean;
   has_claude_key: boolean;

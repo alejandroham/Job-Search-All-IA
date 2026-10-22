@@ -228,8 +228,26 @@ def evaluate_interview_answer(data: dict):
 
 @app.get("/api/settings")
 def get_current_settings():
+    provider = settings.DEFAULT_PROVIDER
+    has_active_key = False
+    active_model_name = ""
+
+    if provider == "gemini":
+        has_active_key = bool(settings.GEMINI_API_KEY)
+        active_model_name = settings.GEMINI_MODEL or "gemini-2.5-flash"
+    elif provider == "openai":
+        has_active_key = bool(settings.OPENAI_API_KEY)
+        active_model_name = settings.OPENAI_MODEL or "gpt-4o"
+    elif provider == "claude":
+        has_active_key = bool(settings.ANTHROPIC_API_KEY)
+        active_model_name = settings.CLAUDE_MODEL or "claude-3-5-sonnet-20241022"
+
     return {
-        "provider": settings.DEFAULT_PROVIDER,
+        "provider": provider,
+        "has_active_key": has_active_key,
+        "active_model_name": active_model_name,
+        "status_label": f"{provider.capitalize()} ({active_model_name})" if has_active_key else "Modo Offline Heurístico",
+        "status_color": "green" if has_active_key else "yellow",
         "has_gemini_key": bool(settings.GEMINI_API_KEY),
         "has_openai_key": bool(settings.OPENAI_API_KEY),
         "has_claude_key": bool(settings.ANTHROPIC_API_KEY),
@@ -240,11 +258,19 @@ def get_current_settings():
 
 @app.post("/api/settings")
 def update_llm_settings(config: LLMConfig):
-    if config.api_key:
+    if config.api_key is not None:
         llm.update_keys(config.provider, config.api_key, config.model_name)
     else:
         settings.DEFAULT_PROVIDER = config.provider
-    return {"message": "Configuración de IA actualizada exitosamente"}
+        if config.model_name:
+            if config.provider == "gemini":
+                settings.GEMINI_MODEL = config.model_name
+            elif config.provider == "openai":
+                settings.OPENAI_MODEL = config.model_name
+            elif config.provider == "claude":
+                settings.CLAUDE_MODEL = config.model_name
+        settings.save_persisted_llm_settings()
+    return {"message": "Configuración de IA actualizada y guardada localmente"}
 
 # Serve frontend build if present
 FRONTEND_DIST = settings.BASE_DIR / "frontend" / "dist"

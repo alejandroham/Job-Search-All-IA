@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Key, Check, Info, Cpu, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Key, Check, Info, Cpu, Sparkles, Trash2 } from 'lucide-react';
 import type { LLMSettings } from '../types';
 import { api } from '../api';
 
@@ -22,12 +22,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
+  useEffect(() => {
+    if (isOpen) {
+      setProvider(settings.provider || 'gemini');
+      const localKey = localStorage.getItem(`job_search_llm_key_${settings.provider || 'gemini'}`);
+      if (localKey && !apiKey) {
+        setApiKey(localKey);
+      }
+    }
+  }, [isOpen, settings.provider]);
+
   if (!isOpen) return null;
+
+  const handleProviderChange = (p: 'gemini' | 'openai' | 'claude') => {
+    setProvider(p);
+    const cachedKey = localStorage.getItem(`job_search_llm_key_${p}`) || '';
+    setApiKey(cachedKey);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
+      if (apiKey) {
+        localStorage.setItem(`job_search_llm_key_${provider}`, apiKey);
+      }
+      localStorage.setItem('job_search_default_provider', provider);
+
       await api.updateSettings({
         provider,
         api_key: apiKey ? apiKey : undefined,
@@ -39,11 +60,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setTimeout(() => {
         setSavedSuccess(false);
         onClose();
-      }, 1500);
+      }, 1200);
     } catch (e) {
       alert('Error guardando configuración: ' + e);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleClearKey = async () => {
+    if (!window.confirm(`¿Deseas borrar la clave de ${provider.toUpperCase()} y volver a Modo Offline Heurístico?`)) return;
+    try {
+      localStorage.removeItem(`job_search_llm_key_${provider}`);
+      setApiKey('');
+      await api.updateSettings({
+        provider,
+        api_key: '',
+        model_name: undefined
+      });
+      const updated = await api.getSettings();
+      onSettingsUpdated(updated);
+    } catch (e) {
+      alert('Error al borrar la clave: ' + e);
     }
   };
 
@@ -76,7 +114,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/50 dark:border-blue-900/50 text-xs text-blue-900 dark:text-blue-200 flex items-start space-x-2">
           <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
           <span className="leading-relaxed">
-            Puedes alternar libremente entre <strong>Google Gemini</strong>, <strong>OpenAI</strong> o <strong>Claude</strong> según tu clave disponible. Si no configuras clave, el sistema corre en modo offline con heurística inteligente.
+            Las claves se almacenan <strong>100% en local</strong> (en tu equipo y navegador, protegidas de git). Sin clave, el sistema funciona en <strong>Modo Offline Heurístico (Amarillo)</strong>. Al ingresar una clave válida, verás el <strong>Punto Verde</strong> y el nombre del modelo.
           </span>
         </div>
 
@@ -84,7 +122,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Provider selector */}
           <div className="space-y-1.5">
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-              Proveedor Principal de IA:
+              Proveedor de IA Seleccionado:
             </label>
             <div className="grid grid-cols-3 gap-2">
               {[
@@ -97,10 +135,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => setProvider(p.id as any)}
+                    onClick={() => handleProviderChange(p.id as any)}
                     className={`p-3 rounded-xl border text-center transition ${
                       isSelected
-                        ? 'bg-blue-50 dark:bg-blue-900/40 border-blue-600 text-blue-900 dark:text-blue-200 font-semibold'
+                        ? 'bg-blue-50 dark:bg-blue-900/40 border-blue-600 text-blue-900 dark:text-blue-200 font-semibold shadow-sm'
                         : 'bg-gray-50 dark:bg-zinc-800 border-black/5 dark:border-white/5 text-gray-600 dark:text-gray-400 hover:border-gray-300'
                     }`}
                   >
@@ -114,14 +152,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* API Key */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center justify-between">
+            <div className="flex items-center justify-between text-xs font-medium text-gray-700 dark:text-gray-300">
               <span>Clave API ({provider.toUpperCase()} API KEY):</span>
-              <span className="text-[10px] text-gray-400">
-                {provider === 'gemini' && (settings.has_gemini_key ? '✓ Configurada' : 'No configurada')}
-                {provider === 'openai' && (settings.has_openai_key ? '✓ Configurada' : 'No configurada')}
-                {provider === 'claude' && (settings.has_claude_key ? '✓ Configurada' : 'No configurada')}
+              <span className="text-[10px]">
+                {provider === 'gemini' && (settings.has_gemini_key ? <span className="text-emerald-500 font-medium">● Activa en local</span> : <span className="text-amber-500 font-medium">○ Sin clave</span>)}
+                {provider === 'openai' && (settings.has_openai_key ? <span className="text-emerald-500 font-medium">● Activa en local</span> : <span className="text-amber-500 font-medium">○ Sin clave</span>)}
+                {provider === 'claude' && (settings.has_claude_key ? <span className="text-emerald-500 font-medium">● Activa en local</span> : <span className="text-amber-500 font-medium">○ Sin clave</span>)}
               </span>
-            </label>
+            </div>
             <div className="relative">
               <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
@@ -129,9 +167,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 placeholder={`Ingresa tu clave de ${provider}...`}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-gray-100 dark:bg-zinc-800 border border-black/5 dark:border-white/5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                className="w-full pl-9 pr-8 py-2 text-xs rounded-xl bg-gray-100 dark:bg-zinc-800 border border-black/5 dark:border-white/5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40"
               />
+              {apiKey && (
+                <button
+                  type="button"
+                  onClick={() => setApiKey('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
+            <p className="text-[10px] text-gray-400">
+              Almacenada con persistencia local en tu equipo.
+            </p>
           </div>
 
           {/* Model Name */}
@@ -154,28 +204,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             />
           </div>
 
-          <div className="flex justify-end space-x-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="px-5 py-2 rounded-xl text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition disabled:opacity-50 flex items-center space-x-1"
-            >
-              {savedSuccess ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-white" />
-                  <span>¡Guardado!</span>
-                </>
-              ) : (
-                <span>{isSaving ? 'Guardando...' : 'Aplicar Configuración'}</span>
+          <div className="flex items-center justify-between pt-2">
+            <div>
+              {(settings.has_gemini_key || settings.has_openai_key || settings.has_claude_key) && (
+                <button
+                  type="button"
+                  onClick={handleClearKey}
+                  className="text-xs text-red-500 hover:text-red-600 flex items-center space-x-1 transition"
+                  title="Eliminar clave y pasar a modo offline"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Borrar clave</span>
+                </button>
               )}
-            </button>
+            </div>
+            <div className="flex space-x-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition flex items-center space-x-1.5 disabled:opacity-50"
+              >
+                {savedSuccess ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-white" />
+                    <span>¡Guardado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{isSaving ? 'Guardando...' : 'Guardar en Local'}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </form>
 

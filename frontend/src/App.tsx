@@ -94,7 +94,7 @@ export function App() {
         darkMode={darkMode}
         setDarkMode={setDarkMode}
         openSettings={() => setIsSettingsOpen(true)}
-        activeProvider={settings.provider}
+        llmSettings={settings}
       />
 
       {/* Main Content Area */}
@@ -109,6 +109,7 @@ export function App() {
             {activeTab === 'radar' && (
               <JobRadar
                 jobs={jobs}
+                profile={profile}
                 onRefresh={async () => {
                   const updated = await api.getJobs();
                   setJobs(updated);

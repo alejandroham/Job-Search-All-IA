@@ -14,18 +14,22 @@ import {
   DollarSign,
   ChevronRight,
   Filter,
-  Trash2
+  Trash2,
+  Mail,
+  Send,
+  Eye
 } from 'lucide-react';
-import type { JobPosting, FitEvaluation } from '../types';
+import type { JobPosting, FitEvaluation, CandidateProfile } from '../types';
 import { api } from '../api';
 
 interface JobRadarProps {
   jobs: JobPosting[];
+  profile?: CandidateProfile | null;
   onRefresh: () => void;
   onApply: (job: JobPosting) => void;
 }
 
-export const JobRadar: React.FC<JobRadarProps> = ({ jobs, onRefresh, onApply }) => {
+export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, onApply }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [remoteOnly, setRemoteOnly] = useState(true);
   const [isScraping, setIsScraping] = useState(false);
@@ -35,6 +39,20 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, onRefresh, onApply }) 
   const [selectedEvaluation, setSelectedEvaluation] = useState<FitEvaluation | null>(null);
   const [evaluatingJobId, setEvaluatingJobId] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [likedJobs, setLikedJobs] = useState<Record<string, boolean>>({});
+  const [feedbackMsg, setFeedbackMsg] = useState<Record<string, string>>({});
+  const [applyingJobId, setApplyingJobId] = useState<string | null>(null);
+
+  const getJobContactEmail = (job: JobPosting): string | null => {
+    if (job.contact_email && job.contact_email.trim()) {
+      return job.contact_email.trim();
+    }
+    if (job.description) {
+      const match = job.description.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      if (match) return match[0];
+    }
+    return null;
+  };
 
   const handleScrape = async () => {
     setIsScraping(true);
@@ -93,10 +111,73 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, onRefresh, onApply }) 
 
   const handleFeedback = async (jobId: string, action: 'like' | 'dislike') => {
     try {
-      await api.sendFeedback(jobId, action);
+      if (action === 'like') {
+        setLikedJobs(prev => ({ ...prev, [jobId]: true }));
+        setFeedbackMsg(prev => ({ ...prev, [jobId]: '¡Interés guardado! La IA priorizará ofertas afines.' }));
+        setTimeout(() => {
+          setFeedbackMsg(prev => {
+            const next = { ...prev };
+            delete next[jobId];
+            return next;
+          });
+        }, 3500);
+        await api.sendFeedback(jobId, action);
+      } else {
+        // Dislike: teach agent preferences and remove from radar
+        await api.sendFeedback(jobId, action);
+        await api.deleteJob(jobId);
+        onRefresh();
+      }
+    } catch (e) {
+      console.error('Error registrando feedback:', e);
+    }
+  };
+
+  const handleOneClickApply = async (job: JobPosting) => {
+    const email = getJobContactEmail(job);
+    const candidateName = profile?.full_name || 'Candidato';
+    const candidateEmail = profile?.contact_info?.email || '';
+    const candidatePhone = profile?.contact_info?.phone || '';
+
+    setApplyingJobId(job.id);
+
+    if (email) {
+      const subject = encodeURIComponent(`Postulación: ${job.title} - ${candidateName}`);
+      const body = encodeURIComponent(
+        `Estimado equipo de selección de ${job.company},\n\n` +
+        `Me pongo en contacto para presentar formalmente mi candidatura a la posición de ${job.title}.\n\n` +
+        `Cuento con sólida experiencia en las responsabilidades del puesto y motivación para integrarme a sus desafíos.\n\n` +
+        `Quedo a su disposición para coordinar una entrevista y conversar en profundidad.\n\n` +
+        `Atentamente,\n` +
+        `${candidateName}\n` +
+        `${candidateEmail ? `Email: ${candidateEmail}\n` : ''}` +
+        `${candidatePhone ? `Teléfono: ${candidatePhone}\n` : ''}`
+      );
+      window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+    } else if (job.url) {
+      window.open(job.url, '_blank', 'noopener,noreferrer');
+    }
+
+    try {
+      await api.updateJobStatus(job.id, 'applied');
+      setFeedbackMsg(prev => ({
+        ...prev,
+        [job.id]: email
+          ? '¡Correo preparado y oferta registrada en Seguimiento!'
+          : '¡Portal abierto y oferta registrada en Seguimiento!'
+      }));
+      setTimeout(() => {
+        setFeedbackMsg(prev => {
+          const next = { ...prev };
+          delete next[job.id];
+          return next;
+        });
+      }, 4000);
       onRefresh();
     } catch (e) {
-      console.error(e);
+      console.error('Error al registrar postulación:', e);
+    } finally {
+      setApplyingJobId(null);
     }
   };
 
@@ -121,7 +202,7 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, onRefresh, onApply }) 
 
   const filteredJobs = jobs.filter(j => {
     const term = searchTerm.toLowerCase();
-    const matchesTerm = !term || j.title.toLowerCase().includes(term) || j.company.toLowerCase().includes(term) || j.tags.some(t => t.toLowerCase().includes(term));
+    const matchesTerm = !term || j.title.toLowerCase().includes(term) || j.company.toLowerCase().includes(term) || (j.tags && j.tags.some(t => t.toLowerCase().includes(term)));
     const matchesRemote = !remoteOnly || j.is_remote;
     return matchesTerm && matchesRemote;
   });
@@ -129,74 +210,82 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, onRefresh, onApply }) 
   return (
     <div className="space-y-6">
       
-      {/* Search & Actions Bar (Cupertino Minimalist) */}
-      <div className="apple-glass apple-card p-4 sm:p-6 space-y-4">
+      {/* Control Banner & Autonomous Search */}
+      <div className="apple-glass apple-card p-6 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          
-          {/* Search Input */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar por rol, stack o empresa (ej. Python, React, AI Engineer)..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-100/80 dark:bg-zinc-800/80 border border-black/5 dark:border-white/5 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition"
-            />
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white flex items-center space-x-2">
+              <span>Radar de Búsqueda Global</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-medium">
+                En vivo
+              </span>
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Descubrimiento autónomo de empleos remotos, evaluación de compatibilidad y postulación en 1 clic.
+            </p>
           </div>
 
-          {/* Controls */}
-          <div className="flex items-center space-x-3">
-            {/* Remote Only Toggle */}
-            <label className="flex items-center space-x-2 text-xs font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={remoteOnly}
-                onChange={(e) => setRemoteOnly(e.target.checked)}
-                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 focus:ring-offset-0 border-gray-300 dark:border-zinc-700 dark:bg-zinc-800"
-              />
-              <span className="flex items-center space-x-1">
-                <Globe className="w-3.5 h-3.5 text-blue-500" />
-                <span>100% Remoto</span>
-              </span>
-            </label>
-
-            {/* Scrape Button */}
-            <button
-              onClick={handleScrape}
-              disabled={isScraping}
-              className="flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition disabled:opacity-50"
-            >
-              <Sparkles className={`w-3.5 h-3.5 ${isScraping ? 'animate-spin' : ''}`} />
-              <span>{isScraping ? 'Rastreando...' : 'Escanear Radar'}</span>
-            </button>
-
-            {/* Batch Rank Button */}
+          {/* Quick Action buttons */}
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleBatchRank}
               disabled={isBatchRanking || jobs.length === 0}
-              className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-medium bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-800 dark:text-gray-200 border border-black/5 dark:border-white/5 transition disabled:opacity-50"
+              className="px-4 py-2 rounded-xl text-xs font-medium bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-800 dark:text-gray-200 transition flex items-center space-x-1.5 disabled:opacity-40"
+              title="Evalúa y clasifica automáticamente los empleos según tu CV"
             >
-              <CheckCircle className={`w-3.5 h-3.5 text-emerald-500 ${isBatchRanking ? 'animate-pulse' : ''}`} />
-              <span>{isBatchRanking ? 'Evaluando...' : 'Evaluar Ajuste Masivo'}</span>
+              <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+              <span>{isBatchRanking ? 'Evaluando...' : 'Reclasificar Todo (IA)'}</span>
             </button>
 
-            {/* Clear All Button */}
+            <button
+              onClick={handleScrape}
+              disabled={isScraping}
+              className="px-5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-sm transition flex items-center space-x-2 disabled:opacity-40"
+            >
+              <Globe className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: isScraping ? '1s' : '0s' }} />
+              <span>{isScraping ? 'Escaneando portales...' : 'Escanear Radar'}</span>
+            </button>
+
             {jobs.length > 0 && (
               <button
                 onClick={handleClearAll}
                 className="p-2 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-zinc-800 transition"
-                title="Limpiar todas las ofertas del radar"
+                title="Limpiar radar completo"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
           </div>
-
         </div>
 
-        {/* URL Importer Row */}
-        <form onSubmit={handleImport} className="pt-2 border-t border-black/5 dark:border-white/5 flex flex-col sm:flex-row items-center gap-3">
+        {/* Search & Filters */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+          <div className="relative flex-1 w-full">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Filtrar por rol, empresa o tecnología (ej. DevOps, Python, React)..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-xl bg-gray-100/70 dark:bg-zinc-800/60 border border-black/5 dark:border-white/5 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition"
+            />
+          </div>
+
+          <button
+            onClick={() => setRemoteOnly(!remoteOnly)}
+            className={`w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-medium border transition flex items-center justify-center space-x-2 ${
+              remoteOnly
+                ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-500/30 text-blue-600 dark:text-blue-400'
+                : 'bg-gray-100/70 dark:bg-zinc-800/60 border-black/5 dark:border-white/5 text-gray-600 dark:text-gray-400'
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span>Sólo Remoto</span>
+          </button>
+        </div>
+
+        {/* URL Importer */}
+        <form onSubmit={handleImport} className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t border-black/5 dark:border-white/5">
           <div className="relative flex-1 w-full">
             <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -244,16 +333,17 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, onRefresh, onApply }) 
             const score = job.fit_score || 0;
             const isTopFit = score >= 85;
             const isGoodFit = score >= 70 && score < 85;
+            const contactEmail = getJobContactEmail(job);
+            const isLiked = Boolean(likedJobs[job.id]);
 
             return (
               <div
                 key={job.id}
-                className="apple-glass apple-card p-5 hover:border-blue-500/30 dark:hover:border-blue-500/30 transition-all duration-200 group"
+                className="apple-glass apple-card p-5 hover:border-blue-500/30 dark:hover:border-blue-500/30 transition-all duration-200 group space-y-3.5"
               >
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                  
-                  {/* Job Details */}
-                  <div className="space-y-2 flex-1">
+                {/* Header: Title, Tags & Score */}
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                  <div className="space-y-1.5 flex-1">
                     <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                       <h3 className="text-base font-semibold text-gray-900 dark:text-white tracking-tight">
                         {job.title}
@@ -273,8 +363,8 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, onRefresh, onApply }) 
                       )}
                     </div>
 
-                    <div className="flex items-center space-x-3 text-xs text-gray-600 dark:text-gray-400">
-                      <span className="font-medium text-gray-900 dark:text-gray-200">{job.company}</span>
+                    <div className="flex items-center space-x-3 text-xs text-gray-600 dark:text-gray-400 flex-wrap">
+                      <span className="font-semibold text-gray-900 dark:text-gray-200">{job.company}</span>
                       <span>•</span>
                       <span>{job.location}</span>
                       {job.salary_range && (
@@ -287,104 +377,162 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, onRefresh, onApply }) 
                         </>
                       )}
                     </div>
-
-                    {/* Description preview */}
-                    <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed pt-1">
-                      {job.description}
-                    </p>
-
-                    {/* Skill Tags */}
-                    {job.tags && job.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {job.tags.slice(0, 5).map((t, idx) => (
-                          <span key={idx} className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100/70 dark:bg-zinc-800/60 text-gray-600 dark:text-gray-400">
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
-                  {/* Match Score & Actions */}
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-3">
-                    
-                    {/* Score Pill */}
+                  {/* Top-Right: Match Score Pill & 5D Link */}
+                  <div className="flex items-center space-x-2 self-start">
                     {hasFit ? (
-                      <div className={`px-3 py-1.5 rounded-full flex items-center space-x-1.5 text-xs font-semibold ${
-                        isTopFit
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                          : isGoodFit
-                          ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
-                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                      }`}>
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>{score}% Ajuste</span>
+                      <div className="flex items-center space-x-1.5">
+                        <button
+                          onClick={() => handleEvaluate(job)}
+                          className={`px-3 py-1.5 rounded-full flex items-center space-x-1.5 text-xs font-semibold transition ${
+                            isTopFit
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
+                              : isGoodFit
+                              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 hover:bg-blue-500/20'
+                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20'
+                          }`}
+                          title="Haz clic para ver el desglose en 5 dimensiones"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>{score}% Ajuste</span>
+                        </button>
                       </div>
                     ) : (
                       <button
                         onClick={() => handleEvaluate(job)}
                         disabled={evaluatingJobId === job.id}
-                        className="text-xs px-3 py-1 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 transition"
+                        className="text-xs px-3 py-1.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 transition flex items-center space-x-1"
                       >
-                        {evaluatingJobId === job.id ? 'Evaluando...' : 'Calcular Ajuste'}
+                        <Sparkles className="w-3 h-3 text-blue-500" />
+                        <span>{evaluatingJobId === job.id ? 'Evaluando...' : 'Calcular Ajuste'}</span>
                       </button>
                     )}
+                  </div>
+                </div>
 
-                    {/* Action buttons */}
-                    <div className="flex items-center space-x-2">
-                      {/* Like button (teaches preference) */}
-                      <button
-                        onClick={() => handleFeedback(job.id, 'like')}
-                        title="Me interesa (enseña a la IA tus gustos)"
-                        className="p-1.5 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-zinc-800 transition"
+                {/* Description snippet */}
+                <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
+                  {job.description}
+                </p>
+
+                {/* Skill Tags */}
+                {job.tags && job.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {job.tags.slice(0, 5).map((t, idx) => (
+                      <span key={idx} className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100/70 dark:bg-zinc-800/60 text-gray-600 dark:text-gray-400">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Bottom Action Bar */}
+                <div className="border-t border-black/5 dark:border-white/5 pt-3.5 flex flex-wrap items-center justify-between gap-3">
+                  
+                  {/* Left: Thumbs & Feedback Controls at Bottom */}
+                  <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                    {/* Thumbs Up: Me interesa */}
+                    <button
+                      onClick={() => handleFeedback(job.id, 'like')}
+                      title="Me interesa (enseña a la IA tus preferencias)"
+                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-xl text-xs font-medium transition ${
+                        isLiked
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700 shadow-sm'
+                          : 'bg-gray-100 dark:bg-zinc-800/80 text-gray-700 dark:text-gray-300 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      <ThumbsUp className={`w-3.5 h-3.5 ${isLiked ? 'text-emerald-600 dark:text-emerald-400 fill-emerald-500/20' : ''}`} />
+                      <span>{isLiked ? 'Te interesa' : 'Me interesa'}</span>
+                    </button>
+
+                    {/* Thumbs Down: Descartar */}
+                    <button
+                      onClick={() => handleFeedback(job.id, 'dislike')}
+                      title="Descartar (descarta la oferta y enseña a la IA lo que no buscas)"
+                      className="flex items-center space-x-1 px-3 py-1.5 rounded-xl text-xs font-medium bg-gray-100 dark:bg-zinc-800/80 text-gray-700 dark:text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-zinc-700 transition"
+                    >
+                      <ThumbsDown className="w-3.5 h-3.5" />
+                      <span>Descartar</span>
+                    </button>
+
+                    {/* Trash Delete Button */}
+                    <button
+                      onClick={() => handleDeleteJob(job.id)}
+                      title="Eliminar esta oferta del radar"
+                      className="p-1.5 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-zinc-800 transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+
+                    {/* Contact Email Chip if detected */}
+                    {contactEmail && (
+                      <div className="hidden sm:flex items-center space-x-1 px-2.5 py-1 rounded-full bg-blue-50/70 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 text-[11px] font-medium border border-blue-200/50 dark:border-blue-900/40">
+                        <Mail className="w-3 h-3 shrink-0" />
+                        <span className="truncate max-w-[160px]">{contactEmail}</span>
+                      </div>
+                    )}
+
+                    {/* Inline Feedback message */}
+                    {feedbackMsg[job.id] && (
+                      <span className="text-xs text-blue-600 dark:text-blue-400 font-medium animate-fade-in">
+                        {feedbackMsg[job.id]}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Right: Apply & Adapt Actions */}
+                  <div className="flex items-center space-x-2">
+                    {/* View Original External Link if email exists */}
+                    {job.url && contactEmail && (
+                      <a
+                        href={job.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Ver publicación original en la web"
+                        className="p-2 rounded-xl text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition"
                       >
-                        <ThumbsUp className="w-4 h-4" />
-                      </button>
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
 
-                      {/* Dislike button */}
-                      <button
-                        onClick={() => handleFeedback(job.id, 'dislike')}
-                        title="Descartar (enseña a la IA lo que no buscas)"
-                        className="p-1.5 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-zinc-800 transition"
-                      >
-                        <ThumbsDown className="w-4 h-4" />
-                      </button>
+                    {/* Adapt CV */}
+                    <button
+                      onClick={() => onApply(job)}
+                      className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium border border-gray-200 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-700 dark:text-gray-200 transition"
+                      title="Personalizar CV y carta de presentación con IA para este empleo"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Adaptar CV</span>
+                    </button>
 
-                      {/* External Link */}
-                      {job.url && (
-                        <a
-                          href={job.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          title="Ver en portal original"
-                          className="p-1.5 rounded-full text-gray-400 hover:text-gray-800 dark:hover:text-white transition"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
+                    {/* 1-Click Apply / Send Email */}
+                    <button
+                      onClick={() => handleOneClickApply(job)}
+                      disabled={applyingJobId === job.id}
+                      className="flex items-center space-x-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-sm transition disabled:opacity-50"
+                      title={
+                        contactEmail
+                          ? `Generar correo de postulación prellenado a ${contactEmail}`
+                          : 'Abrir portal original y registrar como postulado'
+                      }
+                    >
+                      {contactEmail ? (
+                        <>
+                          <Mail className="w-3.5 h-3.5" />
+                          <span>Enviar Correo (1 Clic)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Postular (1 Clic)</span>
+                        </>
                       )}
-
-                      {/* Delete Job Button */}
-                      <button
-                        onClick={() => handleDeleteJob(job.id)}
-                        title="Eliminar esta oferta del radar"
-                        className="p-1.5 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-zinc-800 transition"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-
-                      {/* Drafter / Apply */}
-                      <button
-                        onClick={() => onApply(job)}
-                        className="flex items-center space-x-1 px-3 py-1.5 rounded-xl text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>Adaptar CV</span>
-                      </button>
-                    </div>
-
+                    </button>
                   </div>
 
                 </div>
+
               </div>
             );
           })
@@ -449,22 +597,26 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, onRefresh, onApply }) 
                   <CheckCircle className="w-3.5 h-3.5" />
                   <span>Fortalezas que Cumples:</span>
                 </h5>
-                <ul className="text-xs space-y-1 text-gray-600 dark:text-gray-300">
-                  {selectedEvaluation.strengths.map((s, i) => (
-                    <li key={i} className="flex items-start space-x-1.5">
-                      <span className="text-emerald-500">•</span>
-                      <span>{s}</span>
-                    </li>
-                  ))}
+                <ul className="text-xs text-gray-600 dark:text-gray-300 space-y-1">
+                  {selectedEvaluation.candidate_strengths.length > 0 ? (
+                    selectedEvaluation.candidate_strengths.map((s, i) => (
+                      <li key={i} className="flex items-start space-x-1.5">
+                        <span className="text-emerald-500">✓</span>
+                        <span>{s}</span>
+                      </li>
+                    ))
+                  ) : (
+                    <li className="text-gray-400 text-xs">Sin fortalezas destacadas registradas.</li>
+                  )}
                 </ul>
               </div>
 
               <div className="space-y-2">
                 <h5 className="text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center space-x-1">
-                  <ShieldAlert className="w-3.5 h-3.5" />
-                  <span>Brechas Honestras (Para preparar o aprender):</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                  <span>Habilidades / Brechas Faltantes:</span>
                 </h5>
-                <ul className="text-xs space-y-1 text-gray-600 dark:text-gray-300">
+                <ul className="text-xs text-gray-600 dark:text-gray-300 space-y-1">
                   {selectedEvaluation.missing_skills.length > 0 ? (
                     selectedEvaluation.missing_skills.map((m, i) => (
                       <li key={i} className="flex items-start space-x-1.5">
@@ -487,7 +639,7 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, onRefresh, onApply }) 
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setSelectedEvaluation(null)}
-                className="px-5 py-2 rounded-xl text-xs font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900"
+                className="px-5 py-2 rounded-xl text-xs font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:opacity-90 transition"
               >
                 Cerrar Diagnóstico
               </button>

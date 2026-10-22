@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from app.config import settings
@@ -81,6 +82,10 @@ class Database:
         existing = {j.url.strip().lower() if j.url else f"{j.company.lower()}-{j.title.lower()}": j for j in self.get_jobs()}
         added_count = 0
         for job in new_jobs:
+            if not job.contact_email:
+                email_m = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', job.description or "")
+                if email_m:
+                    job.contact_email = email_m.group(0)
             key = job.url.strip().lower() if job.url else f"{job.company.lower()}-{job.title.lower()}"
             if key not in existing:
                 existing[key] = job
