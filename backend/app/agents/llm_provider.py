@@ -159,30 +159,149 @@ class UnifiedLLMProvider:
         before entering their Gemini/OpenAI/Claude API keys.
         """
         prompt_lower = prompt.lower()
-        if "evaluar ajuste" in prompt_lower or "fit" in prompt_lower or "overall_score" in prompt_lower:
+
+        # 1. Parsing CV
+        if "texto de currículum" in prompt_lower or "candidato" in prompt_lower and "technical_skills" in prompt_lower:
             return json.dumps({
-                "overall_score": 88,
+                "name": "Alejandro Aguirre",
+                "email": "alejandro@example.com",
+                "phone": "+56 9 1234 5678",
+                "location": "Santiago, Chile / Remoto Global",
+                "linkedin_url": "https://linkedin.com/in/alejandro",
+                "github_url": "https://github.com/alejandroham",
+                "portfolio_url": None,
+                "headline": "Senior AI & Full Stack Engineer",
+                "summary": "Ingeniero de Software senior con más de 7 años de experiencia construyendo arquitecturas distribuidas, agentes autónomos y aplicaciones full stack de alto impacto.",
+                "years_of_experience": 7.0,
+                "technical_skills": ["Python", "FastAPI", "TypeScript", "React", "Docker", "Kubernetes", "Google Cloud", "PostgreSQL", "Gemini API"],
+                "soft_skills": ["Liderazgo Técnico", "Comunicación Asíncrona", "Resolución de Problemas Complejos"],
+                "languages": {"Español": "Nativo", "Inglés": "C1 Profesional"},
+                "experiences": [
+                    {
+                        "company": "TechGlobal Inc",
+                        "role": "Lead AI Engineer",
+                        "start_date": "2022",
+                        "end_date": "Presente",
+                        "location": "Remoto",
+                        "is_remote": True,
+                        "description": "Liderazgo de desarrollo de agentes autónomos y plataformas cloud.",
+                        "technologies": ["Python", "React", "FastAPI", "Docker", "GCP"],
+                        "bullet_achievements": [
+                            "Diseñó e implementó agentes autónomos reduciendo tiempos de procesamiento en 45%",
+                            "Lideró equipo distribuido de 6 ingenieros full stack en entornos 100% remotos"
+                        ]
+                    },
+                    {
+                        "company": "CloudSolutions",
+                        "role": "Senior Software Engineer",
+                        "start_date": "2019",
+                        "end_date": "2022",
+                        "location": "Remoto",
+                        "is_remote": True,
+                        "description": "Migración de monolitos a microservicios distribuidos.",
+                        "technologies": ["Python", "Docker", "PostgreSQL", "AWS"],
+                        "bullet_achievements": [
+                            "Elevó la disponibilidad de los microservicios a 99.98%",
+                            "Diseñó APIs RESTful y pipelines automatizados de CI/CD"
+                        ]
+                    }
+                ],
+                "education": [
+                    {
+                        "institution": "Universidad",
+                        "degree": "Ingeniería en Informática",
+                        "field_of_study": "Ciencias de la Computación",
+                        "graduation_year": "2018"
+                    }
+                ],
+                "certifications": ["Google Cloud Certified Professional Cloud Architect"]
+            })
+
+        # 2. Fit Evaluation
+        elif "evaluar ajuste" in prompt_lower or "fit" in prompt_lower or "overall_score" in prompt_lower:
+            return json.dumps({
+                "overall_score": 92,
                 "verdict": "Altamente Recomendado",
                 "dimension_scores": [
-                    {"dimension": "Technical Skills", "score": 90, "reasoning": "Fuerte solapamiento en tecnologías clave solicitadas."},
-                    {"dimension": "Experience & Seniority", "score": 85, "reasoning": "Años de experiencia y autonomía demostrada en proyectos afines."},
-                    {"dimension": "Culture & Work Style", "score": 88, "reasoning": "Alineado con metodologías ágiles y trabajo autónomo/asíncrono."},
-                    {"dimension": "Remote Flexibility", "score": 95, "reasoning": "100% compatible con horario y modalidad remota internacional."},
-                    {"dimension": "Career Alignment", "score": 82, "reasoning": "Permite crecimiento en arquitecturas avanzadas e IA."}
+                    {"dimension": "Technical Skills", "score": 94, "reasoning": "Fuerte coincidencia en Python, arquitecturas cloud y APIs modernas."},
+                    {"dimension": "Experience & Seniority", "score": 90, "reasoning": "Más de 7 años de experiencia demostrada en roles de liderazgo técnico."},
+                    {"dimension": "Culture & Work Style", "score": 92, "reasoning": "Excelente trayectoria en trabajo autónomo y comunicación asíncrona."},
+                    {"dimension": "Remote Flexibility", "score": 100, "reasoning": "100% alineado con trabajo remoto internacional sin fricción horaria."},
+                    {"dimension": "Career Alignment", "score": 85, "reasoning": "Oportunidad de alto impacto en proyectos de ingeniería e IA."}
                 ],
                 "strengths": [
-                    "Experiencia comprobada en arquitecturas modernas y desarrollo end-to-end",
-                    "Capacidad de trabajo autónomo en entornos remotos",
-                    "Habilidades sólidas de resolución de problemas técnicos"
+                    "Experiencia contrastada en diseño e implementación de sistemas escalables",
+                    "Capacidad probada de liderazgo en equipos remotos distribuidos",
+                    "Dominio avanzado de Python, React y despliegues en la nube"
                 ],
                 "missing_skills": [
-                    "Certificación específica del proveedor si la requirieran de forma estricta"
+                    "Herramientas internas específicas del cliente a dominar durante el onboarding"
                 ],
                 "deal_breakers_found": [],
-                "recommendation_summary": "La vacante se alinea notablemente con tu perfil y tus preferencias remotas. Destaca tus métricas de impacto recientes."
+                "recommendation_summary": "Perfil con altísima compatibilidad técnica y cultural. Se aconseja destacar métricas de reducción de tiempos e impacto en el CV."
             })
-        elif "tailor" in prompt_lower or "carta" in prompt_lower or "cv" in prompt_lower:
-            return "Adaptación generada exitosamente orientada al impacto y compatibilidad ATS."
-        return "Respuesta simulada del sistema de búsqueda de empleo (Modo sin API Key configurada)."
+
+        # 3. Drafter: CV and Cover Letter
+        elif "tailored_cv_markdown" in prompt_lower or "vacante objetivo" in prompt_lower:
+            return json.dumps({
+                "tailored_cv_markdown": "# Alejandro Aguirre\n**Senior AI & Full Stack Engineer** | Remoto Global | alejandro@example.com\n\n## Perfil Profesional\nIngeniero de Software senior con más de 7 años de experiencia diseñando arquitecturas distribuidas y agentes de IA escalables.\n\n## Habilidades Clave\nPython, FastAPI, TypeScript, React, Docker, Kubernetes, Google Cloud, PostgreSQL, Gemini API.\n\n## Experiencia Relevante\n### Lead AI Engineer — TechGlobal Inc (2022 - Presente)\n- Diseñó e implementó agentes autónomos reduciendo tiempos de procesamiento en 45%.\n- Lideró equipo de 6 ingenieros full stack en modalidad 100% remota.\n*Tecnologías:* Python, React, FastAPI, Docker, GCP.\n\n### Senior Software Engineer — CloudSolutions (2019 - 2022)\n- Migró monolito a microservicios distribuidos elevando la disponibilidad a 99.98%.\n\n## Educación\n- **Ingeniería en Informática**, Universidad (2018)",
+                "cover_letter": "Estimado equipo de contratación,\n\nLes presento mi postulación para la vacante remota. Con más de 7 años liderando el desarrollo de sistemas distribuidos y soluciones de IA en entornos ágiles y asíncronos, considero que mi perfil encaja directamente con los desafíos técnicos del puesto.\n\nEn mi experiencia reciente como Lead AI Engineer, diseñé e implementé agentes de automatización que optimizaron flujos críticos en un 45%, asegurando alta disponibilidad y buenas prácticas de ingeniería.\n\nQuedo a su disposición para coordinar una entrevista técnica.\n\nAtentamente,\nAlejandro Aguirre"
+            })
+
+        # 4. Reviewer: ATS score and critique
+        elif "audita esta postulación" in prompt_lower or "ats_score" in prompt_lower:
+            return json.dumps({
+                "ats_score": 95,
+                "ats_feedback": [
+                    "Excelente jerarquía de encabezados legible para motores ATS",
+                    "Palabras clave de Python, IA y Cloud claramente integradas",
+                    "Logros orientados al impacto con métricas verificables"
+                ],
+                "reviewer_critique": "El CV y la carta están perfectamente alineados con los requisitos de la vacante, con un tono profesional, sin clichés y con evidencia comprobable."
+            })
+
+        # 5. Preference Learning Insights
+        elif "historial de acciones del usuario" in prompt_lower or "insights" in prompt_lower:
+            return json.dumps({
+                "insights": [
+                    "Prioriza posiciones 100% remotas con compensación competitiva",
+                    "Preferencia por arquitecturas con Python, FastAPI e Inteligencia Artificial",
+                    "Afinidad por empresas con cultura asíncrona y autonomía técnica"
+                ]
+            })
+
+        # 6. Interview Prep Kit
+        elif "kit de preparación" in prompt_lower or "technical_questions" in prompt_lower:
+            return json.dumps({
+                "company_focus": "Enfoque en arquitectura escalable, autonomía en desarrollo remoto y diseño de soluciones con IA.",
+                "technical_questions": [
+                    {
+                        "question": "¿Cómo diseñarías una arquitectura resiliente para orquestar agentes de IA concurrentes?",
+                        "key_concepts": "Colas de mensajes, rate limiting, observabilidad y manejo de fallos",
+                        "tip": "Menciona cómo gestionas la latencia y los reintentos automáticos."
+                    },
+                    {
+                        "question": "¿Cuál es tu estrategia para mantener alta cobertura y calidad en código distribuido?",
+                        "key_concepts": "CI/CD, pruebas de integración y contratos de API",
+                        "tip": "Cita tu experiencia reduciendo incidentes en producción."
+                    }
+                ],
+                "behavioral_questions": [
+                    {
+                        "question": "Cuéntame de una ocasión en que lideraste una decisión técnica polémica en tu equipo.",
+                        "suggested_star_story": "Proyecto de migración a microservicios en CloudSolutions",
+                        "focus": "Enfoque en consenso basado en datos y métricas."
+                    }
+                ],
+                "questions_to_ask_interviewer": [
+                    "¿Cuáles son los hitos tecnológicos principales para este rol en los primeros 6 meses?",
+                    "¿Cómo está estructurado el proceso de toma de decisiones arquitectónicas en el equipo remoto?"
+                ]
+            })
+
+        # Default fallback
+        return json.dumps({
+            "message": "Operación simulada del sistema de búsqueda de empleo (Modo sin API Key configurada)."
+        })
 
 llm = UnifiedLLMProvider()
