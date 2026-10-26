@@ -215,6 +215,20 @@ def classify_job_endpoint(job_id: str, data: dict):
         raise HTTPException(status_code=404, detail="Empleo no encontrado")
     return classified
 
+@app.post("/api/jobs/{job_id}/history", response_model=JobPosting)
+def add_job_history_endpoint(job_id: str, data: dict):
+    updated = db.add_job_history_event(job_id, data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Empleo no encontrado")
+    return updated
+
+@app.delete("/api/jobs/{job_id}/history/{event_id}", response_model=JobPosting)
+def delete_job_history_endpoint(job_id: str, event_id: str):
+    updated = db.delete_job_history_event(job_id, event_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Empleo o evento no encontrado")
+    return updated
+
 @app.delete("/api/jobs/{job_id}")
 def delete_job(job_id: str, from_section: str = "radar"):
     db.delete_job(job_id, from_section=from_section)

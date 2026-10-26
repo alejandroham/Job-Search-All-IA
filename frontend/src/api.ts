@@ -87,6 +87,20 @@ export const api = {
     });
     return res.json();
   },
+  addJobHistory: async (job_id: string, data: { event_type: string; title: string; date?: string; notes?: string }): Promise<JobPosting> => {
+    const res = await fetch(`${API_BASE}/jobs/${job_id}/history`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+  deleteJobHistory: async (job_id: string, event_id: string): Promise<JobPosting> => {
+    const res = await fetch(`${API_BASE}/jobs/${job_id}/history/${event_id}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
   deleteJob: async (job_id: string, from_section: 'radar' | 'tracker' = 'radar'): Promise<{ message: string }> => {
     const res = await fetch(`${API_BASE}/jobs/${job_id}?from_section=${from_section}`, { method: 'DELETE' });
     return res.json();

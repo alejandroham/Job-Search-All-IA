@@ -55,6 +55,14 @@ class UserPreferences(BaseModel):
     auto_learned_insights: List[str] = []
     updated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
+class TrackingHistoryEvent(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    event_type: str = "note" # "saved", "applied", "interview", "responded", "technical_test", "offer", "rejected", "note"
+    title: str
+    date: Optional[str] = None
+    notes: Optional[str] = None
+
 class JobPosting(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str
@@ -78,9 +86,9 @@ class JobPosting(BaseModel):
     fit_score: Optional[int] = None
     # "discovered": en radar
     # "saved": en seguimiento (pendiente de postulación)
-    # "applied": postulada / enviada
-    # "interviewing": en proceso / entrevistas
-    # "responded": respondida por la empresa
+    # "applied": postulada / enviada (CV enviado)
+    # "interviewing": en proceso (en entrevistas)
+    # "responded": en proceso (respondida por la empresa)
     # "offer": Oferta / Exitoso (categoría final favorable)
     # "rejected": Cerrado / No Exitoso (categoría final no favorable)
     status: str = "discovered"
@@ -95,6 +103,9 @@ class JobPosting(BaseModel):
     tailored_cv_html: Optional[str] = None
     tailored_cover_letter: Optional[str] = None
     user_notes: Optional[str] = None
+
+    # Historical Tracking Log (Cronología / Bitácora de eventos del proceso)
+    history: List[TrackingHistoryEvent] = []
 
     # Outcome & Analytics
     outcome: Optional[str] = None

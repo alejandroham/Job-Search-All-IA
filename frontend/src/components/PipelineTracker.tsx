@@ -3,8 +3,6 @@ import {
   Kanban,
   CheckCircle2,
   Clock,
-  Sparkles,
-  ArrowRight,
   Trash2,
   AlertCircle,
   ExternalLink,
@@ -19,14 +17,18 @@ import {
   Download,
   Printer,
   Edit3,
-  BookmarkCheck,
-  Check,
   X,
   Send,
   RotateCcw,
-  BookOpen
+  BookOpen,
+  History,
+  Plus,
+  PhoneCall,
+  Award,
+  Code2,
+  Check
 } from 'lucide-react';
-import type { JobPosting, ApplicationDraft, CandidateProfile, UpskillPlan } from '../types';
+import type { JobPosting, ApplicationDraft, CandidateProfile, UpskillPlan, TrackingHistoryEvent } from '../types';
 import { api } from '../api';
 import { formatDisplayDate, getOfferExpirationBadge } from '../utils/dateUtils';
 
@@ -39,6 +41,7 @@ interface PipelineTrackerProps {
 }
 
 type TabType = 'active' | 'offer' | 'rejected' | 'all';
+type ActiveSubFilter = 'all_active' | 'saved' | 'applied' | 'in_process';
 
 export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
   jobs,
@@ -48,6 +51,7 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
   onApply
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('active');
+  const [activeSubFilter, setActiveSubFilter] = useState<ActiveSubFilter>('all_active');
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modals state
@@ -57,6 +61,7 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
   const [editStatusModal, setEditStatusModal] = useState<JobPosting | null>(null);
   const [classifyModal, setClassifyModal] = useState<JobPosting | null>(null);
   const [deleteConfirmJob, setDeleteConfirmJob] = useState<JobPosting | null>(null);
+  const [historyModalJob, setHistoryModalJob] = useState<JobPosting | null>(null);
   const [latestPlan, setLatestPlan] = useState<UpskillPlan | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -78,18 +83,35 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
   const [feedbackDetails, setFeedbackDetails] = useState<string>('');
   const [isClassifying, setIsClassifying] = useState<boolean>(false);
 
-  // Filter tracked jobs: either tracked_at is present or status != 'discovered'
+  // Add historical milestone state
+  const [newEventType, setNewEventType] = useState<'interview' | 'responded' | 'technical_test' | 'applied' | 'note'>('interview');
+  const [newEventTitle, setNewEventTitle] = useState<string>('');
+  const [newEventDate, setNewEventDate] = useState<string>(() => new Date().toISOString().substring(0, 10));
+  const [newEventNotes, setNewEventNotes] = useState<string>('');
+  const [isSavingEvent, setIsSavingEvent] = useState<boolean>(false);
+
+  // Filter tracked jobs
   const trackedJobs = jobs.filter(j => Boolean(j.tracked_at || (j.status && j.status !== 'discovered')));
 
-  // Counts
+  // Counts for main tabs
   const activeCount = trackedJobs.filter(j => ['saved', 'applied', 'interviewing', 'responded'].includes(j.status)).length;
   const offerCount = trackedJobs.filter(j => j.status === 'offer').length;
   const rejectedCount = trackedJobs.filter(j => j.status === 'rejected').length;
   const allCount = trackedJobs.length;
 
-  // Filtered by tab
+  // Counts for sub-filters of Active Postulations
+  const savedCount = trackedJobs.filter(j => j.status === 'saved').length;
+  const appliedCount = trackedJobs.filter(j => j.status === 'applied').length;
+  const inProcessCount = trackedJobs.filter(j => ['interviewing', 'responded'].includes(j.status)).length;
+
+  // Filtered by main tab and sub-filter
   const tabJobs = trackedJobs.filter(j => {
-    if (activeTab === 'active') return ['saved', 'applied', 'interviewing', 'responded'].includes(j.status);
+    if (activeTab === 'active') {
+      if (activeSubFilter === 'saved') return j.status === 'saved';
+      if (activeSubFilter === 'applied') return j.status === 'applied';
+      if (activeSubFilter === 'in_process') return ['interviewing', 'responded'].includes(j.status);
+      return ['saved', 'applied', 'interviewing', 'responded'].includes(j.status);
+    }
     if (activeTab === 'offer') return j.status === 'offer';
     if (activeTab === 'rejected') return j.status === 'rejected';
     return true;
@@ -150,6 +172,26 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  // Quick Action: Advance to CV Enviado / Postulado
+  const handleMarkAsApplied = async (job: JobPosting) => {
+    const today = new Date().toISOString().substring(0, 10);
+    try {
+      await api.updateJob(job.id, {
+        status: 'applied',
+        applied_date: today
+      });
+      await api.addJobHistory(job.id, {
+        event_type: 'applied',
+        title: 'CV Enviado y Postulado',
+        date: today,
+        notes: 'Postulación registrada en la plataforma.'
+      });
+      onRefresh();
+    } catch (e: any) {
+      alert('Error al registrar postulación: ' + (e?.message || e));
+    }
   };
 
   // Open Edit Status Modal
@@ -218,6 +260,57 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
     }
   };
 
+  // Open History / Timeline Modal
+  const openHistoryModal = (job: JobPosting, defaultType?: 'interview' | 'responded') => {
+    setHistoryModalJob(job);
+    if (defaultType) {
+      setNewEventType(defaultType);
+      setNewEventTitle(
+        defaultType === 'interview'
+          ? 'Entrevista con el equipo'
+          : 'Respondida por la empresa (contacto inicial)'
+      );
+    } else {
+      setNewEventType('interview');
+      setNewEventTitle('');
+    }
+    setNewEventDate(new Date().toISOString().substring(0, 10));
+    setNewEventNotes('');
+  };
+
+  const handleAddHistoryEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!historyModalJob || !newEventTitle.trim()) return;
+    setIsSavingEvent(true);
+    try {
+      const updatedJob = await api.addJobHistory(historyModalJob.id, {
+        event_type: newEventType,
+        title: newEventTitle.trim(),
+        date: newEventDate,
+        notes: newEventNotes.trim() || undefined
+      });
+      setHistoryModalJob(updatedJob);
+      setNewEventTitle('');
+      setNewEventNotes('');
+      onRefresh();
+    } catch (e: any) {
+      alert('Error registrando evento histórico: ' + (e?.message || e));
+    } finally {
+      setIsSavingEvent(false);
+    }
+  };
+
+  const handleDeleteHistoryEvent = async (jobId: string, eventId: string) => {
+    if (!window.confirm('¿Deseas eliminar este registro de la bitácora?')) return;
+    try {
+      const updatedJob = await api.deleteJobHistory(jobId, eventId);
+      setHistoryModalJob(updatedJob);
+      onRefresh();
+    } catch (e: any) {
+      alert('Error eliminando hito: ' + (e?.message || e));
+    }
+  };
+
   // Open Classify Modal
   const openClassifyModal = (job: JobPosting, initialCategory: 'offer' | 'rejected') => {
     setClassifyModal(job);
@@ -237,7 +330,6 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
         feedback: feedbackDetails
       });
 
-      // If rejected, also trigger AI outcome process for upskilling if details given
       if (targetCategory === 'rejected') {
         try {
           const plan = await api.submitOutcome({
@@ -265,11 +357,11 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
   };
 
   const handleRevertToActive = async (job: JobPosting) => {
-    if (!window.confirm(`¿Deseas reabrir esta postulación y moverla a "Postulaciones Activas"?`)) return;
+    if (!window.confirm(`¿Deseas reabrir esta postulación y regresarla a "Postulaciones Activas"?`)) return;
     try {
       await api.classifyJob(job.id, {
         status: 'applied',
-        reason: 'Reabierta por el usuario'
+        reason: 'Reabierta manualmente por el usuario'
       });
       onRefresh();
     } catch (e: any) {
@@ -292,35 +384,54 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'saved':
-        return { label: 'Guardada / Pendiente', class: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800' };
+        return { label: 'Guardada / Pendiente', class: 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 font-semibold' };
       case 'applied':
-        return { label: 'CV Enviado / Postulado', class: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800' };
+        return { label: 'CV Enviado / Postulado', class: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 font-semibold' };
       case 'interviewing':
-        return { label: 'En Entrevistas', class: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800' };
+        return { label: 'En Proceso • En Entrevistas', class: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 font-bold animate-pulse' };
       case 'responded':
-        return { label: 'Respondida / En Contacto', class: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800' };
+        return { label: 'En Proceso • Respondida', class: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 font-bold' };
       case 'offer':
         return { label: '🏆 Oferta / Exitoso', class: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 font-bold' };
       case 'rejected':
-        return { label: '📁 Cerrado / No Exitoso', class: 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800' };
+        return { label: '📁 Cerrado / No Exitoso', class: 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800 font-medium' };
       default:
         return { label: status, class: 'bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-zinc-700' };
+    }
+  };
+
+  const getEventIcon = (type: string) => {
+    switch (type) {
+      case 'interview':
+        return <MessageSquare className="w-4 h-4 text-purple-600 dark:text-purple-400" />;
+      case 'responded':
+        return <PhoneCall className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />;
+      case 'technical_test':
+        return <Code2 className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />;
+      case 'applied':
+        return <Send className="w-4 h-4 text-blue-600 dark:text-blue-400" />;
+      case 'offer':
+        return <Award className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />;
+      case 'rejected':
+        return <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400" />;
+      default:
+        return <Clock className="w-4 h-4 text-gray-500" />;
     }
   };
 
   return (
     <div className="space-y-6">
       
-      {/* Module Header */}
+      {/* Module Header & Lifecycle Flow */}
       <div className="apple-glass apple-card p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center space-x-2">
               <Kanban className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              <span>Seguimiento de Postulaciones (Registro Permanente)</span>
+              <span>Seguimiento de Postulaciones (Ciclo de Vida & Registro Histórico)</span>
             </h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-2xl leading-relaxed">
-              Tus oportunidades guardadas se conservan protegidas de forma indefinida, junto con los CVs adaptados, correos redactados y estados de postulación.
+              Gestiona el avance de cada candidatura: <strong>Guardada/Pendiente → CV Enviado → En Proceso (Entrevistas & Respuestas) → Resultado Final (Exitoso o No Exitoso)</strong>.
             </p>
           </div>
 
@@ -331,10 +442,11 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
           </div>
         </div>
 
-        {/* Search bar & Tabs */}
+        {/* Main Category Tabs */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2 border-t border-black/5 dark:border-white/5">
-          {/* Navigation Tabs */}
           <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 md:pb-0 text-xs">
+            
+            {/* Tab: Postulaciones Activas */}
             <button
               onClick={() => setActiveTab('active')}
               className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl font-medium transition shrink-0 ${
@@ -349,6 +461,7 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
               </span>
             </button>
 
+            {/* Tab: Oferta / Exitoso */}
             <button
               onClick={() => setActiveTab('offer')}
               className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl font-medium transition shrink-0 ${
@@ -364,6 +477,7 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
               </span>
             </button>
 
+            {/* Tab: Cerrado / No Exitoso */}
             <button
               onClick={() => setActiveTab('rejected')}
               className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl font-medium transition shrink-0 ${
@@ -379,9 +493,10 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
               </span>
             </button>
 
+            {/* Tab: Todas */}
             <button
               onClick={() => setActiveTab('all')}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl font-medium transition shrink-0 ${
+              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl font-medium transition shrink-0 ${
                 activeTab === 'all'
                   ? 'bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 shadow-xs font-semibold'
                   : 'bg-gray-100 dark:bg-zinc-800/80 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700'
@@ -398,13 +513,68 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
           <div className="w-full md:w-64">
             <input
               type="text"
-              placeholder="Filtrar por cargo o empresa..."
+              placeholder="Filtrar por cargo, empresa o notas..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full px-3 py-1.5 text-xs rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-black/5 dark:border-white/5 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
         </div>
+
+        {/* Sub-Filters when in Active Postulations */}
+        {activeTab === 'active' && (
+          <div className="flex items-center space-x-2 pt-2 border-t border-black/5 dark:border-white/5 flex-wrap gap-y-2">
+            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+              Etapa del Proceso:
+            </span>
+
+            <div className="flex items-center space-x-1 bg-gray-100 dark:bg-zinc-800/80 p-0.5 rounded-xl text-xs">
+              <button
+                onClick={() => setActiveSubFilter('all_active')}
+                className={`px-3 py-1 rounded-lg font-medium transition ${
+                  activeSubFilter === 'all_active'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs font-semibold'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                }`}
+              >
+                Todas las Activas ({activeCount})
+              </button>
+
+              <button
+                onClick={() => setActiveSubFilter('saved')}
+                className={`px-3 py-1 rounded-lg font-medium transition ${
+                  activeSubFilter === 'saved'
+                    ? 'bg-white dark:bg-zinc-700 text-amber-700 dark:text-amber-400 shadow-xs font-semibold'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                }`}
+              >
+                🟡 Guardada / Pendiente ({savedCount})
+              </button>
+
+              <button
+                onClick={() => setActiveSubFilter('applied')}
+                className={`px-3 py-1 rounded-lg font-medium transition ${
+                  activeSubFilter === 'applied'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs font-semibold'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                }`}
+              >
+                🟠 CV Enviado / Postulado ({appliedCount})
+              </button>
+
+              <button
+                onClick={() => setActiveSubFilter('in_process')}
+                className={`px-3 py-1 rounded-lg font-medium transition ${
+                  activeSubFilter === 'in_process'
+                    ? 'bg-white dark:bg-zinc-700 text-purple-600 dark:text-purple-400 shadow-xs font-semibold'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                }`}
+              >
+                🟣 En Proceso (Entrevistas & Respuestas) ({inProcessCount})
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Jobs Listing */}
@@ -418,14 +588,18 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
               ? 'Aún no hay ofertas clasificadas como "Oferta / Exitoso"'
               : activeTab === 'rejected'
               ? 'No hay ofertas en "Cerrado / No Exitoso"'
-              : activeTab === 'active'
-              ? 'No tienes postulaciones activas en Seguimiento'
-              : 'Sin registros en Seguimiento'}
+              : activeSubFilter === 'saved'
+              ? 'No hay ofertas en estado "Guardada / Pendiente"'
+              : activeSubFilter === 'applied'
+              ? 'No hay ofertas en estado "CV Enviado / Postulado"'
+              : activeSubFilter === 'in_process'
+              ? 'No hay ofertas actualmente "En Proceso" (entrevistas o respondidas)'
+              : 'Sin postulaciones en esta sección'}
           </h3>
           <p className="text-xs text-gray-500 dark:text-gray-400 max-w-md mx-auto">
             {activeTab === 'active'
-              ? 'Dirígete al Radar de Búsqueda y presiona "+ Seguimiento" o "Postular" en las oportunidades que te interesen para monitorearlas aquí permanentemente.'
-              : 'Las oportunidades clasificadas se conservarán en esta vista con sus documentos y notas asociadas.'}
+              ? 'Puedes agregar ofertas desde el Radar de Búsqueda usando "+ Seguimiento" y gestionarlas a lo largo de sus entrevistas y etapas.'
+              : 'Las oportunidades clasificadas se conservan aquí de manera permanente para tu registro histórico.'}
           </p>
         </div>
       ) : (
@@ -437,6 +611,8 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
             const expirationBadge = getOfferExpirationBadge(job.deadline);
             const tailoredCv = getTailoredCvText(job);
             const isFinalized = job.status === 'offer' || job.status === 'rejected';
+            const historyList = job.history || [];
+            const latestEvent = historyList.length > 0 ? historyList[historyList.length - 1] : null;
 
             return (
               <div
@@ -446,16 +622,19 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
                     ? 'border-emerald-400/40 dark:border-emerald-700/40 bg-emerald-50/10'
                     : job.status === 'rejected'
                     ? 'border-red-400/30 dark:border-red-800/30 bg-red-50/5'
+                    : job.status === 'interviewing' || job.status === 'responded'
+                    ? 'border-purple-300 dark:border-purple-900/60 bg-purple-50/5'
                     : ''
                 }`}
               >
                 {/* Header Information */}
                 <div className="space-y-2.5">
+                  
                   {/* Top Bar: Status Badge, Method Badge, Expiration Badge */}
                   <div className="flex items-center justify-between gap-1.5 flex-wrap">
                     <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
                       {/* Current Status Badge */}
-                      <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${statusBadge.class}`}>
+                      <span className={`text-[11px] px-2.5 py-0.5 rounded-full border ${statusBadge.class}`}>
                         {statusBadge.label}
                       </span>
 
@@ -540,6 +719,33 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
                     </div>
                   </div>
 
+                  {/* Historical Log Preview / Recent Milestone */}
+                  <div className="p-2.5 rounded-xl bg-purple-50/40 dark:bg-purple-950/20 border border-purple-200/50 dark:border-purple-900/40 space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center space-x-1.5 text-purple-700 dark:text-purple-300 font-semibold">
+                        <History className="w-3.5 h-3.5" />
+                        <span>Historial del Proceso ({historyList.length} hitos)</span>
+                      </div>
+                      <button
+                        onClick={() => openHistoryModal(job)}
+                        className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:underline flex items-center space-x-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>+ Registrar Hito</span>
+                      </button>
+                    </div>
+
+                    {latestEvent ? (
+                      <p className="text-[11px] text-gray-700 dark:text-gray-300 line-clamp-1 pt-0.5">
+                        <strong>{latestEvent.date || formatDisplayDate(latestEvent.timestamp)}:</strong> {latestEvent.title} {latestEvent.notes ? `— "${latestEvent.notes}"` : ''}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-gray-500 italic">
+                        Sin eventos registrados aún. Presiona "+ Registrar Hito" para anotar llamadas, entrevistas o avances.
+                      </p>
+                    )}
+                  </div>
+
                   {/* User Notes Preview if any */}
                   {(job.user_notes || job.notes) && (
                     <div className="p-2.5 rounded-xl bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200/40 dark:border-blue-900/30 text-xs">
@@ -566,7 +772,7 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
                   )}
                 </div>
 
-                {/* Actions Grid (Full Suite of Requirements) */}
+                {/* Actions Grid */}
                 <div className="border-t border-black/5 dark:border-white/5 pt-3 space-y-2.5 mt-auto">
                   
                   {/* Action Row 1: Document Viewers (Ver Oferta, Ver CV, Ver Correo, Ver Destino) */}
@@ -620,7 +826,7 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
                         title={`Enviar a ${contactEmail}`}
                       >
                         <Send className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">Destino Email</span>
+                        <span className="truncate">Email Destino</span>
                       </button>
                     ) : job.url ? (
                       <a
@@ -640,8 +846,66 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
                     )}
                   </div>
 
-                  {/* Action Row 2: Outcomes & Status Management */}
-                  <div className="flex items-center justify-between gap-2 pt-1">
+                  {/* Action Row 2: Lifecycle Stage Advancement Buttons */}
+                  {!isFinalized && (
+                    <div className="flex items-center justify-between gap-1.5 p-2 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border border-black/5 dark:border-white/5 text-xs">
+                      <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+                        Avance de Etapa:
+                      </span>
+
+                      <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                        {/* If saved: Button to mark as Applied */}
+                        {job.status === 'saved' && (
+                          <button
+                            onClick={() => handleMarkAsApplied(job)}
+                            className="flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition shadow-xs"
+                            title="Registrar que ya enviaste tu postulación"
+                          >
+                            <Send className="w-3 h-3" />
+                            <span>Marcar CV Enviado</span>
+                          </button>
+                        )}
+
+                        {/* If applied: Buttons to register Response or Interview */}
+                        {job.status === 'applied' && (
+                          <>
+                            <button
+                              onClick={() => openHistoryModal(job, 'responded')}
+                              className="flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/40 hover:bg-indigo-100 transition"
+                              title="Registrar que la empresa respondió a tu postulación"
+                            >
+                              <PhoneCall className="w-3 h-3" />
+                              <span>Respondida</span>
+                            </button>
+
+                            <button
+                              onClick={() => openHistoryModal(job, 'interview')}
+                              className="flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition shadow-xs"
+                              title="Registrar que fuiste citado a una entrevista"
+                            >
+                              <MessageSquare className="w-3 h-3" />
+                              <span>En Entrevista</span>
+                            </button>
+                          </>
+                        )}
+
+                        {/* If already interviewing or responded */}
+                        {(job.status === 'interviewing' || job.status === 'responded') && (
+                          <button
+                            onClick={() => openHistoryModal(job)}
+                            className="flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40 hover:bg-purple-100 transition"
+                            title="Añadir siguiente ronda de entrevista, prueba o nota"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>+ Siguiente Ronda / Hito</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Row 3: Final Outcome & Delete */}
+                  <div className="flex items-center justify-between gap-2 pt-0.5">
                     
                     {/* Outcome Classification / Reopen button */}
                     {!isFinalized ? (
@@ -677,14 +941,24 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
                       </div>
                     )}
 
-                    {/* Manual Delete with explicit confirmation */}
-                    <button
-                      onClick={() => setDeleteConfirmJob(job)}
-                      className="p-1.5 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-zinc-800 transition"
-                      title="Eliminar registro definitivamente de Seguimiento"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center space-x-1">
+                      <button
+                        onClick={() => openHistoryModal(job)}
+                        className="p-1.5 rounded-xl text-gray-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-zinc-800 transition"
+                        title="Ver bitácora completa de eventos"
+                      >
+                        <History className="w-4 h-4" />
+                      </button>
+
+                      {/* Manual Delete with explicit confirmation */}
+                      <button
+                        onClick={() => setDeleteConfirmJob(job)}
+                        className="p-1.5 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-zinc-800 transition"
+                        title="Eliminar registro definitivamente de Seguimiento"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                 </div>
@@ -692,6 +966,202 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* MODAL HISTÓRICO: Bitácora del Proceso & Cronología de Eventos */}
+      {historyModalJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="apple-glass apple-card max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
+            
+            {/* Modal Header */}
+            <div className="p-6 border-b border-black/5 dark:border-white/5 flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <History className="w-5 h-5 text-purple-600" />
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                    Bitácora Histórica del Proceso
+                  </h3>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {historyModalJob.title} en <strong>{historyModalJob.company}</strong>
+                </p>
+              </div>
+
+              <button
+                onClick={() => setHistoryModalJob(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="p-6 overflow-y-auto space-y-6 text-xs">
+              
+              {/* Form to Register New Milestone */}
+              <form onSubmit={handleAddHistoryEvent} className="p-4 rounded-2xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200/50 dark:border-purple-900/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-gray-900 dark:text-white flex items-center space-x-1.5">
+                    <Plus className="w-4 h-4 text-purple-600" />
+                    <span>Registrar Nuevo Hito en el Proceso</span>
+                  </h4>
+                  <span className="text-[10px] text-gray-500">Actualiza automáticamente el estado</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-300 mb-1">
+                      Tipo de Hito:
+                    </label>
+                    <select
+                      value={newEventType}
+                      onChange={(e) => {
+                        const val = e.target.value as any;
+                        setNewEventType(val);
+                        if (!newEventTitle) {
+                          if (val === 'interview') setNewEventTitle('Entrevista Técnica');
+                          else if (val === 'responded') setNewEventTitle('Respuesta de la empresa');
+                          else if (val === 'technical_test') setNewEventTitle('Prueba técnica');
+                          else if (val === 'applied') setNewEventTitle('CV Enviado');
+                          else setNewEventTitle('');
+                        }
+                      }}
+                      className="w-full px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-zinc-800 border border-black/5 dark:border-white/5 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    >
+                      <option value="interview">👥 Entrevista (RRHH, Técnica, Gerente, etc.)</option>
+                      <option value="responded">📞 Respondida / Contactado por la empresa</option>
+                      <option value="technical_test">💻 Prueba Técnica / Challenge</option>
+                      <option value="applied">📄 CV Enviado / Postulación</option>
+                      <option value="note">📝 Nota / Seguimiento continuo</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-300 mb-1">
+                      Fecha del Hito:
+                    </label>
+                    <input
+                      type="date"
+                      value={newEventDate}
+                      onChange={(e) => setNewEventDate(e.target.value)}
+                      required
+                      className="w-full px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-zinc-800 border border-black/5 dark:border-white/5 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-300 mb-1">
+                    Título o Descripción del Hito:
+                  </label>
+                  <input
+                    type="text"
+                    value={newEventTitle}
+                    onChange={(e) => setNewEventTitle(e.target.value)}
+                    placeholder="Ej: Entrevista técnica con Líder de Ingeniería, Prueba en HackerRank..."
+                    required
+                    className="w-full px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-zinc-800 border border-black/5 dark:border-white/5 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-300 mb-1">
+                    Notas y Observaciones (opcional):
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={newEventNotes}
+                    onChange={(e) => setNewEventNotes(e.target.value)}
+                    placeholder="Detalla lo conversado, preguntas realizadas, impresiones o pasos a seguir..."
+                    className="w-full px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-zinc-800 border border-black/5 dark:border-white/5 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isSavingEvent || !newEventTitle.trim()}
+                    className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition shadow-xs disabled:opacity-50"
+                  >
+                    {isSavingEvent ? 'Guardando...' : 'Guardar Hito en Bitácora'}
+                  </button>
+                </div>
+              </form>
+
+              {/* Historical Timeline */}
+              <div className="space-y-3">
+                <h4 className="font-bold text-gray-900 dark:text-white flex items-center space-x-1.5 text-xs uppercase tracking-wider">
+                  <Calendar className="w-4 h-4 text-gray-400" />
+                  <span>Línea de Tiempo del Proceso</span>
+                </h4>
+
+                {(!historyModalJob.history || historyModalJob.history.length === 0) ? (
+                  <p className="text-gray-500 italic p-4 text-center">
+                    No se han registrado eventos históricos para esta postulación aún.
+                  </p>
+                ) : (
+                  <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-200 dark:before:bg-zinc-700">
+                    {historyModalJob.history.map((event) => (
+                      <div key={event.id} className="relative group">
+                        
+                        {/* Timeline Bullet */}
+                        <div className="absolute -left-6 top-1 w-5 h-5 rounded-full bg-white dark:bg-zinc-900 border-2 border-purple-500 flex items-center justify-center">
+                          <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
+                        </div>
+
+                        {/* Event Card */}
+                        <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-black/5 dark:border-white/5 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center space-x-2">
+                              {getEventIcon(event.event_type)}
+                              <span className="font-bold text-gray-900 dark:text-white text-xs">
+                                {event.title}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center space-x-2 text-[10px] text-gray-400">
+                              <span>{event.date || formatDisplayDate(event.timestamp)}</span>
+                              <button
+                                onClick={() => handleDeleteHistoryEvent(historyModalJob.id, event.id)}
+                                className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition"
+                                title="Eliminar este evento"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {event.notes && (
+                            <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-line pt-0.5">
+                              {event.notes}
+                            </p>
+                          )}
+                        </div>
+
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-gray-50 dark:bg-zinc-900/80 border-t border-black/5 dark:border-white/5 flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">
+                Estado actual: <strong>{getStatusBadge(historyModalJob.status).label}</strong>
+              </span>
+
+              <button
+                onClick={() => setHistoryModalJob(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-gray-200 dark:bg-zinc-800 hover:bg-gray-300 dark:hover:bg-zinc-700 text-gray-800 dark:text-gray-200"
+              >
+                Cerrar Bitácora
+              </button>
+            </div>
+
+          </div>
         </div>
       )}
 
@@ -983,10 +1453,10 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
                   onChange={(e) => setEditStatusValue(e.target.value)}
                   className="w-full px-3 py-2 text-xs rounded-xl bg-gray-50 dark:bg-zinc-800/80 border border-black/5 dark:border-white/5 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
-                  <option value="saved">Guardada / Pendiente</option>
-                  <option value="applied">CV Enviado / Postulado</option>
-                  <option value="interviewing">En Entrevistas</option>
-                  <option value="responded">Respondida / En Contacto</option>
+                  <option value="saved">🟡 Guardada / Pendiente</option>
+                  <option value="applied">🟠 CV Enviado / Postulado</option>
+                  <option value="interviewing">🟣 En Proceso • En Entrevistas</option>
+                  <option value="responded">🔵 En Proceso • Respondida</option>
                   <option value="offer">🏆 Oferta / Exitoso</option>
                   <option value="rejected">📁 Cerrado / No Exitoso</option>
                 </select>
@@ -1081,7 +1551,7 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
                       <span>Oferta / Exitoso</span>
                     </div>
                     <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
-                      Postulante seleccionado o con oferta laboral formal.
+                      Postulante seleccionado o con oferta laboral formal recibida.
                     </p>
                   </button>
 
@@ -1099,7 +1569,7 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
                       <span>Cerrado / No Exitoso</span>
                     </div>
                     <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
-                      Rechazo, selección de otro candidato o cierre sin éxito.
+                      Rechazo, contratación de otro candidato o cierre sin éxito.
                     </p>
                   </button>
                 </div>
@@ -1137,7 +1607,7 @@ export const PipelineTracker: React.FC<PipelineTrackerProps> = ({
 
               <div className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border border-black/5 dark:border-white/5 text-[11px] text-gray-600 dark:text-gray-400 space-y-1">
                 <p>
-                  <strong>Importante:</strong> Esta acción archivará la postulación en la categoría seleccionada, preservando todos sus documentos, CV adaptado, fechas e historial.
+                  <strong>Importante:</strong> Esta acción archivará la postulación en la categoría seleccionada, registrando el hito de término en su historial y preservando todos sus documentos, CV adaptado y notas.
                 </p>
                 <p className="text-gray-500">
                   Podrás consultarla en cualquier momento o reabrirla si fue un error.

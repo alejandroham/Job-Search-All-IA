@@ -50,6 +50,15 @@ export interface UserPreferences {
   updated_at?: string;
 }
 
+export interface TrackingHistoryEvent {
+  id: string;
+  timestamp: string;
+  event_type: 'saved' | 'applied' | 'interview' | 'responded' | 'technical_test' | 'note' | 'offer' | 'rejected';
+  title: string;
+  date?: string;
+  notes?: string;
+}
+
 export interface JobPosting {
   id: string;
   title: string;
@@ -83,6 +92,9 @@ export interface JobPosting {
   tailored_cv_html?: string;
   tailored_cover_letter?: string;
   user_notes?: string;
+
+  // Historical Tracking Log (Bitácora de eventos del proceso)
+  history?: TrackingHistoryEvent[];
 
   // Outcome details
   notes?: string;

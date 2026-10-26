@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 from app.config import settings
 from app.models.schemas import (
     CandidateProfile, UserPreferences, JobPosting, 
-    FitEvaluation, ApplicationDraft, FeedbackAction
+    FitEvaluation, ApplicationDraft, FeedbackAction, TrackingHistoryEvent
 )
 
 class Database:
@@ -137,6 +137,17 @@ class Database:
         if target.status == "discovered":
             target.status = "saved"
 
+        # Initialize tracking history if empty
+        if not target.history:
+            target.history.append(
+                TrackingHistoryEvent(
+                    event_type="saved",
+                    title="Oferta guardada en Seguimiento (Pendiente)",
+                    date=now_iso[:10],
+                    notes="Incorporada desde el Radar de Búsqueda."
+                )
+            )
+
         if not target.application_method:
             target.application_method = "email" if target.contact_email else "url"
 
@@ -186,9 +197,21 @@ class Database:
             if hasattr(target, key) and value is not None:
                 setattr(target, key, value)
 
-        # Automatic date handling when status changes
-        if updates.get("status") == "applied" and not target.applied_date:
-            target.applied_date = datetime.utcnow().strftime("%Y-%m-%d")
+        # Automatic date handling and history logging when status changes
+        if updates.get("status") == "applied":
+            if not target.applied_date:
+                target.applied_date = datetime.utcnow().strftime("%Y-%m-%d")
+            # Log to history if not logged yet
+            if not any(h.event_type == "applied" for h in target.history):
+                target.history.append(
+                    TrackingHistoryEvent(
+                        event_type="applied",
+                        title="CV Enviado y Postulado",
+                        date=target.applied_date,
+                        notes="Postulación enviada exitosamente."
+                    )
+                )
+
         if updates.get("status") in ("offer", "rejected") and not target.outcome_date:
             target.outcome_date = datetime.utcnow().strftime("%Y-%m-%d")
             target.outcome_success = (updates.get("status") == "offer")
@@ -202,14 +225,87 @@ class Database:
         Preserves all history and documents.
         """
         from datetime import datetime
+        today_str = datetime.utcnow().strftime("%Y-%m-%d")
         updates = {
             "status": status,
             "outcome_reason": reason,
             "outcome_feedback": feedback,
-            "outcome_date": datetime.utcnow().strftime("%Y-%m-%d"),
+            "outcome_date": today_str,
             "outcome_success": (status == "offer")
         }
-        return self.update_job(job_id, updates)
+        res = self.update_job(job_id, updates)
+        if res:
+            title = "Oferta Laboral Formal / Proceso Exitoso" if status == "offer" else "Proceso Concluido / No Exitoso"
+            res.history.append(
+                TrackingHistoryEvent(
+                    event_type="offer" if status == "offer" else "rejected",
+                    title=title,
+                    date=today_str,
+                    notes=f"Motivo: {reason}" if reason else feedback
+                )
+            )
+            jobs = self.get_jobs()
+            for idx, j in enumerate(jobs):
+                if j.id == job_id:
+                    jobs[idx] = res
+                    break
+            self._write_json(settings.JOBS_FILE, [j.model_dump() for j in jobs])
+        return res
+
+    def add_job_history_event(self, job_id: str, event_data: Dict[str, Any]) -> Optional[JobPosting]:
+        jobs = self.get_jobs()
+        target = next((j for j in jobs if j.id == job_id), None)
+        if not target:
+            return None
+
+        from datetime import datetime
+        import uuid
+
+        event = TrackingHistoryEvent(
+            id=event_data.get("id") or str(uuid.uuid4()),
+            timestamp=datetime.utcnow().isoformat(),
+            event_type=event_data.get("event_type", "note"),
+            title=event_data.get("title", "Actualización del proceso"),
+            date=event_data.get("date") or datetime.utcnow().strftime("%Y-%m-%d"),
+            notes=event_data.get("notes")
+        )
+        target.history.append(event)
+
+        # Automatic status progression based on event type
+        ev_type = event.event_type
+        if ev_type == "interview":
+            target.status = "interviewing"
+        elif ev_type == "responded":
+            if target.status in ("saved", "applied"):
+                target.status = "responded"
+        elif ev_type == "applied":
+            target.status = "applied"
+            if not target.applied_date:
+                target.applied_date = event.date or datetime.utcnow().strftime("%Y-%m-%d")
+        elif ev_type == "offer":
+            target.status = "offer"
+            target.outcome_success = True
+            target.outcome_date = event.date or datetime.utcnow().strftime("%Y-%m-%d")
+            if event.notes and not target.outcome_reason:
+                target.outcome_reason = event.notes
+        elif ev_type == "rejected":
+            target.status = "rejected"
+            target.outcome_success = False
+            target.outcome_date = event.date or datetime.utcnow().strftime("%Y-%m-%d")
+            if event.notes and not target.outcome_reason:
+                target.outcome_reason = event.notes
+
+        self._write_json(settings.JOBS_FILE, [j.model_dump() for j in jobs])
+        return target
+
+    def delete_job_history_event(self, job_id: str, event_id: str) -> Optional[JobPosting]:
+        jobs = self.get_jobs()
+        target = next((j for j in jobs if j.id == job_id), None)
+        if not target:
+            return None
+        target.history = [h for h in target.history if h.id != event_id]
+        self._write_json(settings.JOBS_FILE, [j.model_dump() for j in jobs])
+        return target
 
     def update_job_status(self, job_id: str, status: str, fit_score: Optional[int] = None):
         updates: Dict[str, Any] = {"status": status}
