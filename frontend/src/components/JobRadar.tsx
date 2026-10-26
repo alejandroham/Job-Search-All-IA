@@ -3,36 +3,44 @@ import {
   Search,
   Globe,
   Sparkles,
-  Link as LinkIcon,
   ThumbsUp,
   ThumbsDown,
   ExternalLink,
   ShieldAlert,
-  CheckCircle,
   FileText,
   Briefcase,
   DollarSign,
-  ChevronRight,
-  Filter,
   Trash2,
   Mail,
   Send,
   Eye,
-  LayoutGrid,
   Columns,
-  List
+  List,
+  Calendar,
+  Clock,
+  BookmarkPlus,
+  BookmarkCheck,
+  X
 } from 'lucide-react';
 import type { JobPosting, FitEvaluation, CandidateProfile } from '../types';
 import { api } from '../api';
+import { formatDisplayDate, getOfferExpirationBadge } from '../utils/dateUtils';
 
 interface JobRadarProps {
   jobs: JobPosting[];
   profile?: CandidateProfile | null;
   onRefresh: () => void;
   onApply: (job: JobPosting) => void;
+  onNavigateToTracker?: () => void;
 }
 
-export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, onApply }) => {
+export const JobRadar: React.FC<JobRadarProps> = ({
+  jobs,
+  profile,
+  onRefresh,
+  onApply,
+  onNavigateToTracker
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [searchScope, setSearchScope] = useState<'global' | 'chile' | 'all'>(() => {
@@ -44,9 +52,11 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
   const [isImporting, setIsImporting] = useState(false);
   const [selectedEvaluation, setSelectedEvaluation] = useState<FitEvaluation | null>(null);
   const [evaluatingJobId, setEvaluatingJobId] = useState<string | null>(null);
+  const [selectedJobForDetail, setSelectedJobForDetail] = useState<JobPosting | null>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [likedJobs, setLikedJobs] = useState<Record<string, boolean>>({});
   const [feedbackMsg, setFeedbackMsg] = useState<Record<string, string>>({});
+  const [trackingJobId, setTrackingJobId] = useState<string | null>(null);
   const [applyingJobId, setApplyingJobId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid3' | 'grid2' | 'list'>(() => {
     return (localStorage.getItem('job_radar_view_mode') as 'grid3' | 'grid2' | 'list') || 'grid3';
@@ -82,6 +92,39 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
       url_import: '🔗 Importado'
     };
     return map[src] || src;
+  };
+
+  const isTracked = (job: JobPosting): boolean => {
+    return Boolean(job.tracked_at || (job.status && job.status !== 'discovered'));
+  };
+
+  const handleTrackJob = async (job: JobPosting) => {
+    if (isTracked(job)) {
+      if (onNavigateToTracker) {
+        onNavigateToTracker();
+      }
+      return;
+    }
+    setTrackingJobId(job.id);
+    try {
+      await api.trackJob(job.id);
+      setFeedbackMsg(prev => ({
+        ...prev,
+        [job.id]: '✓ Guardada permanentemente en Seguimiento'
+      }));
+      setTimeout(() => {
+        setFeedbackMsg(prev => {
+          const next = { ...prev };
+          delete next[job.id];
+          return next;
+        });
+      }, 4000);
+      onRefresh();
+    } catch (e: any) {
+      alert('Error agregando a Seguimiento: ' + (e?.message || e));
+    } finally {
+      setTrackingJobId(null);
+    }
   };
 
   const handleScrape = async () => {
@@ -153,9 +196,8 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
         }, 3500);
         await api.sendFeedback(jobId, action);
       } else {
-        // Dislike: teach agent preferences and remove from radar
         await api.sendFeedback(jobId, action);
-        await api.deleteJob(jobId);
+        await api.deleteJob(jobId, 'radar');
         onRefresh();
       }
     } catch (e) {
@@ -165,9 +207,9 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
 
   const handleOneClickApply = async (job: JobPosting) => {
     const email = getJobContactEmail(job);
-    const candidateName = profile?.full_name || 'Candidato';
-    const candidateEmail = profile?.contact_info?.email || '';
-    const candidatePhone = profile?.contact_info?.phone || '';
+    const candidateName = profile?.name || 'Candidato';
+    const candidateEmail = profile?.email || '';
+    const candidatePhone = profile?.phone || '';
 
     setApplyingJobId(job.id);
 
@@ -189,12 +231,16 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
     }
 
     try {
-      await api.updateJobStatus(job.id, 'applied');
+      await api.trackJob(job.id);
+      await api.updateJob(job.id, {
+        status: 'applied',
+        applied_date: new Date().toISOString()
+      });
       setFeedbackMsg(prev => ({
         ...prev,
         [job.id]: email
-          ? '¡Correo preparado y oferta registrada en Seguimiento!'
-          : '¡Portal abierto y oferta registrada en Seguimiento!'
+          ? '¡Correo preparado y oferta guardada en Seguimiento!'
+          : '¡Portal abierto y oferta guardada en Seguimiento!'
       }));
       setTimeout(() => {
         setFeedbackMsg(prev => {
@@ -211,17 +257,17 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
     }
   };
 
-  const handleDeleteJob = async (jobId: string) => {
+  const handleDeleteFromRadar = async (jobId: string) => {
     try {
-      await api.deleteJob(jobId);
+      await api.deleteJob(jobId, 'radar');
       onRefresh();
     } catch (e) {
       alert('Error eliminando empleo: ' + e);
     }
   };
 
-  const handleClearAll = async () => {
-    if (!window.confirm('¿Deseas vaciar todo el radar de empleos?')) return;
+  const handleClearAllRadar = async () => {
+    if (!window.confirm('¿Deseas vaciar las ofertas del Radar? (Las ofertas agregadas a Seguimiento permanecerán seguras).')) return;
     try {
       await api.clearAllJobs();
       onRefresh();
@@ -230,7 +276,10 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
     }
   };
 
-  const filteredJobs = jobs.filter(j => {
+  // Only display in radar if in_radar is true or not explicitly false
+  const radarJobs = jobs.filter(j => j.in_radar !== false);
+
+  const filteredJobs = radarJobs.filter(j => {
     const term = searchTerm.toLowerCase();
     const matchesTerm = !term || j.title.toLowerCase().includes(term) || j.company.toLowerCase().includes(term) || (j.tags && j.tags.some(t => t.toLowerCase().includes(term)));
     const matchesRemote = !remoteOnly || j.is_remote;
@@ -251,201 +300,194 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
               </span>
             </h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Búsqueda en portales chilenos (GetOnBoard, LinkedIn Chile, CompuTrabajo, ChileTrabajos, Laborum) y globales. Admite modalidades presencial, híbrida y remota.
+              Escanea simultáneamente portales chilenos (GetOnBoard, CompuTrabajo, ChileTrabajos, Laborum, LinkedIn CL) y remotos mundiales.
             </p>
           </div>
 
-          {/* Quick Action buttons */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center space-x-2 flex-wrap gap-y-2">
             <button
               onClick={handleBatchRank}
-              disabled={isBatchRanking || jobs.length === 0}
-              className="px-4 py-2 rounded-xl text-xs font-medium bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-800 dark:text-gray-200 transition flex items-center space-x-1.5 disabled:opacity-40"
-              title="Evalúa y clasifica automáticamente los empleos según tu CV"
+              disabled={isBatchRanking || filteredJobs.length === 0}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800/40 hover:bg-purple-100 transition disabled:opacity-50"
+              title="Calcular ajuste dimensional de las mejores oportunidades"
             >
-              <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-              <span>{isBatchRanking ? 'Evaluando...' : 'Reclasificar Todo (IA)'}</span>
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{isBatchRanking ? 'Evaluando...' : 'Clasificar con IA'}</span>
             </button>
+
+            <button
+              onClick={handleClearAllRadar}
+              disabled={filteredJobs.length === 0}
+              className="flex items-center space-x-1 px-3 py-1.5 rounded-xl text-xs font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-zinc-800 transition disabled:opacity-40"
+              title="Vaciar las ofertas del radar (no borra las guardadas en Seguimiento)"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Limpiar Radar</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Search Input, Filters & Scope selector */}
+        <div className="space-y-3 pt-2">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por cargo, tecnología o empresa (ej: Python, React, Data Engineer)..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleScrape()}
+                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-black/5 dark:border-white/5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
 
             <button
               onClick={handleScrape}
               disabled={isScraping}
-              className="px-5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-sm transition flex items-center space-x-2 disabled:opacity-40"
+              className="flex items-center justify-center space-x-2 px-5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition disabled:opacity-50 shrink-0"
             >
-              <Globe className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: isScraping ? '1s' : '0s' }} />
-              <span>{isScraping ? 'Escaneando portales...' : 'Escanear Radar'}</span>
+              <Globe className={`w-3.5 h-3.5 ${isScraping ? 'animate-spin' : ''}`} />
+              <span>{isScraping ? 'Rastreando portales...' : 'Escanear Radar'}</span>
             </button>
-
-            {jobs.length > 0 && (
-              <button
-                onClick={handleClearAll}
-                className="p-2 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-zinc-800 transition"
-                title="Limpiar radar completo"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
           </div>
-        </div>
 
-        {/* Scope Selector: Chile, Global, or Ambos */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-black/5 dark:border-white/5">
-          <div className="flex items-center space-x-1.5">
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-300 mr-1">Alcance:</span>
-            <div className="inline-flex rounded-xl p-1 bg-gray-100 dark:bg-zinc-800/80 border border-black/5 dark:border-white/5 text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchScope('chile');
-                  localStorage.setItem('job_radar_scope', 'chile');
-                }}
-                className={`px-3 py-1.5 rounded-lg font-medium transition ${
-                  searchScope === 'chile'
-                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                }`}
-                title="Buscar en GetOnBoard, LinkedIn Chile, CompuTrabajo, ChileTrabajos y Laborum"
-              >
-                🇨🇱 Solo Chile
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchScope('global');
-                  localStorage.setItem('job_radar_scope', 'global');
-                }}
-                className={`px-3 py-1.5 rounded-lg font-medium transition ${
-                  searchScope === 'global'
-                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                }`}
-                title="Buscar en portales internacionales remotos"
-              >
-                🌍 Global Remoto
-              </button>
-
+          {/* Scope & Remote Toggles */}
+          <div className="flex items-center justify-between flex-wrap gap-2 pt-1 text-xs text-gray-600 dark:text-gray-400">
+            <div className="flex items-center space-x-1 bg-gray-100 dark:bg-zinc-800/80 p-0.5 rounded-xl">
               <button
                 type="button"
                 onClick={() => {
                   setSearchScope('all');
                   localStorage.setItem('job_radar_scope', 'all');
                 }}
-                className={`px-3 py-1.5 rounded-lg font-medium transition ${
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
                   searchScope === 'all'
                     ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
                 }`}
-                title="Escanear simultáneamente Chile + Global"
               >
-                🌐 Ambos (Chile + Global)
+                🌐 Todos (Chile + Global)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchScope('chile');
+                  localStorage.setItem('job_radar_scope', 'chile');
+                }}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                  searchScope === 'chile'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                }`}
+              >
+                🇨🇱 Solo Chile
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchScope('global');
+                  localStorage.setItem('job_radar_scope', 'global');
+                }}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                  searchScope === 'global'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                }`}
+              >
+                🌍 Solo Global Remoto
               </button>
             </div>
-          </div>
 
-          {/* Modality Filter */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setRemoteOnly(!remoteOnly)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 ${
-                remoteOnly
-                  ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-500/30 text-blue-600 dark:text-blue-400'
-                  : 'bg-gray-100/70 dark:bg-zinc-800/60 border-black/5 dark:border-white/5 text-gray-600 dark:text-gray-400'
-              }`}
-              title="Alternar entre ver solo remoto o todas las modalidades (presencial, híbrido y remoto)"
-            >
-              <Filter className="w-3.5 h-3.5" />
-              <span>{remoteOnly ? 'Modalidad: Solo Remoto' : 'Modalidad: Todas (Presencial + Híbrido + Remoto)'}</span>
-            </button>
+            <label className="flex items-center space-x-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={remoteOnly}
+                onChange={(e) => setRemoteOnly(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+              />
+              <span className="text-xs">Solo empleos 100% remotos</span>
+            </label>
           </div>
         </div>
 
-        {/* Keyword Search Input */}
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar por cargo, palabra clave o tecnología (ej. Administrador de Redes, DevOps, Python, Soporte)..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-xl bg-gray-100/70 dark:bg-zinc-800/60 border border-black/5 dark:border-white/5 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition"
-            />
-          </div>
-        </div>
-
-        {/* URL Importer */}
-        <form onSubmit={handleImport} className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t border-black/5 dark:border-white/5">
-          <div className="relative flex-1 w-full">
-            <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        {/* Import URL bar */}
+        <div className="pt-2 border-t border-black/5 dark:border-white/5">
+          <form onSubmit={handleImport} className="flex gap-2">
             <input
               type="url"
-              placeholder="¿Viste una oferta en LinkedIn, Greenhouse o Lever? Pega la URL aquí para importarla..."
+              placeholder="¿Viste una oferta en LinkedIn, Computrabajo, GetOnBoard u otro sitio? Pega el enlace aquí..."
               value={importUrl}
               onChange={(e) => setImportUrl(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-xl bg-transparent border border-dashed border-gray-300 dark:border-zinc-700 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 transition"
+              className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-black/5 dark:border-white/5 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
-          </div>
-          <button
-            type="submit"
-            disabled={isImporting || !importUrl}
-            className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:opacity-90 transition disabled:opacity-40"
-          >
-            {isImporting ? 'Extrayendo...' : 'Importar Oferta'}
-          </button>
-        </form>
-
-        {importStatus && (
-          <p className="text-xs text-blue-600 dark:text-blue-400 animate-fade-in">{importStatus}</p>
-        )}
+            <button
+              type="submit"
+              disabled={isImporting || !importUrl}
+              className="px-4 py-1.5 rounded-xl text-xs font-medium bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-800 dark:text-gray-200 transition disabled:opacity-50 shrink-0"
+            >
+              {isImporting ? 'Importando...' : 'Importar Oferta'}
+            </button>
+          </form>
+          {importStatus && (
+            <p className="text-[11px] text-blue-600 dark:text-blue-400 font-medium mt-1 animate-fade-in">
+              {importStatus}
+            </p>
+          )}
+        </div>
       </div>
 
-      {/* Jobs Section */}
+      {/* Results Header + View Mode Switcher */}
       <div className="space-y-4">
-        {/* Header with Counter and Layout Mode Switcher */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400 px-1">
+        <div className="flex items-center justify-between flex-wrap gap-2 px-1">
           <div className="flex items-center space-x-2">
-            <span>Mostrando <strong className="text-gray-900 dark:text-white">{filteredJobs.length}</strong> oportunidades activas</span>
-            <span>•</span>
-            <span>Ordenadas por coincidencia</span>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+              Oportunidades en el Radar
+            </h3>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400">
+              {filteredJobs.length} encontradas
+            </span>
           </div>
 
-          {/* View Mode Switcher: 3 por fila, 2 por fila, Lista */}
-          <div className="flex items-center space-x-1 bg-gray-100 dark:bg-zinc-800/80 p-0.5 rounded-xl border border-black/5 dark:border-white/5 self-start sm:self-auto">
+          {/* View mode toggle */}
+          <div className="flex items-center space-x-1 bg-gray-100 dark:bg-zinc-800 p-0.5 rounded-xl text-xs">
             <button
+              type="button"
               onClick={() => handleSetViewMode('grid3')}
-              className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-medium transition ${
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg transition ${
                 viewMode === 'grid3'
-                  ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs font-semibold'
+                  : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
               }`}
-              title="Mostrar 3 ofertas por fila"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>3 por fila</span>
-            </button>
-
-            <button
-              onClick={() => handleSetViewMode('grid2')}
-              className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-medium transition ${
-                viewMode === 'grid2'
-                  ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
-              title="Mostrar 2 ofertas por fila"
+              title="3 columnas compactas"
             >
               <Columns className="w-3.5 h-3.5" />
-              <span>2 por fila</span>
+              <span>3 Cards</span>
             </button>
 
             <button
-              onClick={() => handleSetViewMode('list')}
-              className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-medium transition ${
-                viewMode === 'list'
-                  ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              type="button"
+              onClick={() => handleSetViewMode('grid2')}
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg transition ${
+                viewMode === 'grid2'
+                  ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs font-semibold'
+                  : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
               }`}
-              title="Mostrar 1 oferta por fila (Lista amplia)"
+              title="2 columnas"
+            >
+              <Columns className="w-3.5 h-3.5" />
+              <span>2 Cards</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSetViewMode('list')}
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg transition ${
+                viewMode === 'list'
+                  ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs font-semibold'
+                  : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+              }`}
+              title="Vista de lista"
             >
               <List className="w-3.5 h-3.5" />
               <span>Lista</span>
@@ -453,6 +495,7 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
           </div>
         </div>
 
+        {/* Job Cards */}
         {filteredJobs.length === 0 ? (
           <div className="apple-glass apple-card p-12 text-center space-y-3">
             <div className="w-12 h-12 mx-auto rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-400">
@@ -460,7 +503,7 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
             </div>
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Sin vacantes en el radar todavía</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-              Haz clic en "Escanear Radar" para que el agente busque oportunidades remotas activas en portales globales, o pega la URL de una oferta que te interese.
+              Haz clic en "Escanear Radar" para buscar oportunidades en portales chilenos y globales, o pega la URL de una oferta que te interese.
             </p>
           </div>
         ) : (
@@ -478,7 +521,9 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
               const isGoodFit = score >= 70 && score < 85;
               const contactEmail = getJobContactEmail(job);
               const isLiked = Boolean(likedJobs[job.id]);
+              const tracked = isTracked(job);
               const isCompact = viewMode === 'grid3' || viewMode === 'grid2';
+              const expirationBadge = getOfferExpirationBadge(job.deadline);
 
               return (
                 <div
@@ -488,8 +533,9 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
                   }`}
                 >
                   {/* Card Content Area */}
-                  <div className="space-y-2 flex-1">
-                    {/* Top Row: Tags + Fit Score */}
+                  <div className="space-y-2.5 flex-1">
+                    
+                    {/* Top Row: Source, Remote tag, Expiration badge */}
                     <div className="flex items-center justify-between gap-1.5 flex-wrap">
                       <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
                         <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 tracking-wide">
@@ -502,6 +548,11 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
                             <span>Remoto</span>
                           </span>
                         )}
+
+                        {/* Expiration badge */}
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${expirationBadge.badgeClass}`}>
+                          {expirationBadge.label}
+                        </span>
                       </div>
 
                       {/* Score Pill / Button */}
@@ -534,10 +585,11 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
 
                     {/* Job Title */}
                     <h3
-                      className={`font-semibold text-gray-900 dark:text-white tracking-tight leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition ${
+                      className={`font-semibold text-gray-900 dark:text-white tracking-tight leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition cursor-pointer ${
                         isCompact ? 'text-sm line-clamp-2' : 'text-base'
                       }`}
-                      title={job.title}
+                      onClick={() => setSelectedJobForDetail(job)}
+                      title="Ver detalle completo de la oferta"
                     >
                       {job.title}
                     </h3>
@@ -558,16 +610,30 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
                       )}
                     </div>
 
+                    {/* Publication & Deadline Dates */}
+                    <div className="flex items-center space-x-3 text-[11px] text-gray-500 dark:text-gray-400 pt-0.5">
+                      <span className="flex items-center space-x-1">
+                        <Calendar className="w-3 h-3 text-gray-400" />
+                        <span>Publicado: <strong>{formatDisplayDate(job.posted_at)}</strong></span>
+                      </span>
+                      {job.deadline && (
+                        <span className="flex items-center space-x-1">
+                          <Clock className="w-3 h-3 text-gray-400" />
+                          <span>Cierre: <strong>{formatDisplayDate(job.deadline)}</strong></span>
+                        </span>
+                      )}
+                    </div>
+
                     {/* Description preview */}
-                    <p className={`text-xs text-gray-500 dark:text-gray-400 leading-relaxed pt-0.5 ${
-                      isCompact ? 'line-clamp-2' : 'line-clamp-2'
+                    <p className={`text-xs text-gray-500 dark:text-gray-400 leading-relaxed ${
+                      isCompact ? 'line-clamp-2' : 'line-clamp-3'
                     }`}>
                       {job.description}
                     </p>
 
                     {/* Skill Tags */}
                     {job.tags && job.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 pt-1">
+                      <div className="flex flex-wrap gap-1 pt-0.5">
                         {job.tags.slice(0, isCompact ? 3 : 5).map((t, idx) => (
                           <span
                             key={idx}
@@ -585,14 +651,13 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
                     )}
                   </div>
 
-                  {/* Bottom Action Bar (Anchored at Bottom) */}
+                  {/* Bottom Action Bar */}
                   <div className="border-t border-black/5 dark:border-white/5 pt-3 space-y-2 mt-auto">
                     
-                    {/* Upper Action Row: Thumbs, Delete, Email chip, External Link */}
+                    {/* Upper row: Feedback, View Detail, Destination */}
                     <div className="flex items-center justify-between gap-1 text-xs">
                       {/* Thumbs & Trash */}
                       <div className="flex items-center space-x-1.5">
-                        {/* Thumb Up */}
                         <button
                           onClick={() => handleFeedback(job.id, 'like')}
                           title="Me interesa (enseña a la IA tus preferencias)"
@@ -603,22 +668,18 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
                           }`}
                         >
                           <ThumbsUp className={`w-3.5 h-3.5 ${isLiked ? 'text-emerald-600 dark:text-emerald-400 fill-emerald-500/20' : ''}`} />
-                          {!isCompact && <span>{isLiked ? 'Te interesa' : 'Me interesa'}</span>}
                         </button>
 
-                        {/* Thumb Down */}
                         <button
                           onClick={() => handleFeedback(job.id, 'dislike')}
-                          title="Descartar (descarta y enseña a la IA lo que no buscas)"
+                          title="Descartar del radar"
                           className="flex items-center space-x-1 px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 dark:bg-zinc-800/80 text-gray-600 dark:text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-zinc-700 transition"
                         >
                           <ThumbsDown className="w-3.5 h-3.5" />
-                          {!isCompact && <span>Descartar</span>}
                         </button>
 
-                        {/* Delete */}
                         <button
-                          onClick={() => handleDeleteJob(job.id)}
+                          onClick={() => handleDeleteFromRadar(job.id)}
                           title="Eliminar esta oferta del radar"
                           className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-zinc-800 transition"
                         >
@@ -626,24 +687,33 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
                         </button>
                       </div>
 
-                      {/* Right: Email chip & Web portal link */}
-                      <div className="flex items-center space-x-1 max-w-[50%] justify-end">
+                      {/* Right: Ver Detalle button & Direct links */}
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => setSelectedJobForDetail(job)}
+                          className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[11px] font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-800 transition"
+                          title="Ver detalle completo de la oferta y requisitos"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-blue-500" />
+                          <span>Detalle</span>
+                        </button>
+
                         {contactEmail && (
-                          <div
-                            title={`Correo de contacto detectado: ${contactEmail}`}
-                            className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-blue-50/70 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 text-[10px] font-medium border border-blue-200/50 dark:border-blue-900/40 truncate"
+                          <span
+                            title={`Correo receptor: ${contactEmail}`}
+                            className="p-1 rounded-lg text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40"
                           >
-                            <Mail className="w-2.5 h-2.5 shrink-0" />
-                            <span className="truncate">{contactEmail}</span>
-                          </div>
+                            <Mail className="w-3 h-3" />
+                          </span>
                         )}
+
                         {job.url && (
                           <a
                             href={job.url}
                             target="_blank"
                             rel="noreferrer"
-                            title="Ver publicación original en portal web"
-                            className="p-1 rounded-lg text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition shrink-0"
+                            title="Ver enlace original de postulación"
+                            className="p-1 rounded-lg text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition"
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
                           </a>
@@ -651,43 +721,74 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
                       </div>
                     </div>
 
-                    {/* Feedback message indicator if any */}
+                    {/* Feedback message indicator */}
                     {feedbackMsg[job.id] && (
                       <p className="text-[11px] text-blue-600 dark:text-blue-400 font-medium animate-fade-in truncate">
                         {feedbackMsg[job.id]}
                       </p>
                     )}
 
-                    {/* Lower Action Row: Adapt CV & 1-Click Apply */}
-                    <div className="grid grid-cols-2 gap-2 pt-0.5">
+                    {/* Lower Action Row: + Seguimiento, Adaptar CV, 1-Click Apply */}
+                    <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                      
+                      {/* Action 1: Add to Tracking / In Tracking */}
+                      <button
+                        onClick={() => handleTrackJob(job)}
+                        disabled={trackingJobId === job.id}
+                        className={`flex items-center justify-center space-x-1 py-1.5 px-2 rounded-xl text-[11px] font-semibold transition ${
+                          tracked
+                            ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40 hover:bg-blue-100'
+                            : 'border border-gray-200 dark:border-zinc-700 hover:border-blue-400 text-gray-700 dark:text-gray-200 hover:bg-blue-50/50 dark:hover:bg-zinc-800'
+                        }`}
+                        title={
+                          tracked
+                            ? 'Esta oferta ya está registrada en Seguimiento. Haz clic para ir al módulo.'
+                            : 'Guardar oferta en Seguimiento de forma permanente'
+                        }
+                      >
+                        {tracked ? (
+                          <>
+                            <BookmarkCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                            <span className="truncate">Seguimiento</span>
+                          </>
+                        ) : (
+                          <>
+                            <BookmarkPlus className="w-3.5 h-3.5 shrink-0 text-gray-500" />
+                            <span className="truncate">+ Seguimiento</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Action 2: Adapt CV */}
                       <button
                         onClick={() => onApply(job)}
-                        className="flex items-center justify-center space-x-1 py-1.5 px-2 rounded-xl text-xs font-medium border border-gray-200 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-700 dark:text-gray-200 transition"
+                        className="flex items-center justify-center space-x-1 py-1.5 px-2 rounded-xl text-[11px] font-medium border border-gray-200 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-700 dark:text-gray-200 transition"
                         title="Personalizar CV y carta de presentación con IA"
                       >
                         <FileText className="w-3.5 h-3.5 shrink-0" />
                         <span className="truncate">Adaptar CV</span>
                       </button>
 
+                      {/* Action 3: 1-Click Apply */}
                       <button
                         onClick={() => handleOneClickApply(job)}
                         disabled={applyingJobId === job.id}
-                        className="flex items-center justify-center space-x-1 py-1.5 px-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-sm transition disabled:opacity-50"
+                        className="flex items-center justify-center space-x-1 py-1.5 px-2 rounded-xl text-[11px] font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-xs transition disabled:opacity-50"
                         title={
                           contactEmail
-                            ? `Generar correo de postulación prellenado a ${contactEmail}`
-                            : 'Abrir portal original y registrar como postulado'
+                            ? `Generar correo de postulación a ${contactEmail}`
+                            : 'Abrir portal de postulación y registrar en Seguimiento'
                         }
                       >
                         {contactEmail ? (
                           <>
                             <Mail className="w-3.5 h-3.5 shrink-0" />
-                            <span className="truncate">Email (1 Clic)</span>
+                            <span className="truncate">Email 1-Clic</span>
                           </>
                         ) : (
                           <>
                             <Send className="w-3.5 h-3.5 shrink-0" />
-                            <span className="truncate">Postular (1 Clic)</span>
+                            <span className="truncate">Postular</span>
                           </>
                         )}
                       </button>
@@ -701,6 +802,208 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
           </div>
         )}
       </div>
+
+      {/* Full Job Detail Modal */}
+      {selectedJobForDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="apple-glass apple-card max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            
+            {/* Header */}
+            <div className="p-6 border-b border-black/5 dark:border-white/5 flex items-start justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                  <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+                    {formatSource(selectedJobForDetail.source)}
+                  </span>
+                  {selectedJobForDetail.is_remote && (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+                      🌍 Remoto
+                    </span>
+                  )}
+                  {(() => {
+                    const b = getOfferExpirationBadge(selectedJobForDetail.deadline);
+                    return (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${b.badgeClass}`}>
+                        {b.label}
+                      </span>
+                    );
+                  })()}
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">
+                  {selectedJobForDetail.title}
+                </h2>
+                <div className="flex items-center space-x-2 text-xs text-gray-600 dark:text-gray-400 flex-wrap">
+                  <span className="font-semibold text-gray-900 dark:text-gray-100">{selectedJobForDetail.company}</span>
+                  <span>•</span>
+                  <span>{selectedJobForDetail.location}</span>
+                  {selectedJobForDetail.salary_range && (
+                    <>
+                      <span>•</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                        {selectedJobForDetail.salary_range}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedJobForDetail(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="p-6 overflow-y-auto space-y-5 text-xs text-gray-700 dark:text-gray-300">
+              
+              {/* Dates & Method Card */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border border-black/5 dark:border-white/5">
+                <div>
+                  <span className="text-gray-400 text-[10px] font-semibold uppercase tracking-wider block">Fecha de Publicación</span>
+                  <p className="font-medium text-gray-900 dark:text-white mt-0.5">
+                    {formatDisplayDate(selectedJobForDetail.posted_at)}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-[10px] font-semibold uppercase tracking-wider block">Fecha Límite / Término</span>
+                  <p className="font-medium text-gray-900 dark:text-white mt-0.5">
+                    {formatDisplayDate(selectedJobForDetail.deadline)}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-[10px] font-semibold uppercase tracking-wider block">Método de Postulación</span>
+                  <p className="font-medium text-gray-900 dark:text-white mt-0.5 flex items-center space-x-1">
+                    {getJobContactEmail(selectedJobForDetail) ? (
+                      <>
+                        <Mail className="w-3 h-3 text-blue-500" />
+                        <span>Correo Electrónico</span>
+                      </>
+                    ) : (
+                      <>
+                        <Globe className="w-3 h-3 text-blue-500" />
+                        <span>Portal Web / Enlace</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Tags */}
+              {selectedJobForDetail.tags && selectedJobForDetail.tags.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Tecnologías y Palabras Clave</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedJobForDetail.tags.map((tag, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2.5 py-1 rounded-md bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 font-medium"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Description */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Descripción Completa del Cargo</span>
+                <div className="p-4 rounded-xl bg-white dark:bg-zinc-900/60 border border-black/5 dark:border-white/5 whitespace-pre-line leading-relaxed text-xs">
+                  {selectedJobForDetail.description}
+                </div>
+              </div>
+
+              {/* Destination links */}
+              <div className="p-3.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-900/40 flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">Destino de la Oferta</span>
+                  <p className="text-xs text-gray-700 dark:text-gray-300">
+                    {getJobContactEmail(selectedJobForDetail) ? (
+                      <span>Correo receptor: <strong>{getJobContactEmail(selectedJobForDetail)}</strong></span>
+                    ) : selectedJobForDetail.url ? (
+                      <span className="truncate max-w-md block">{selectedJobForDetail.url}</span>
+                    ) : (
+                      <span>Sin enlace externo registrado</span>
+                    )}
+                  </p>
+                </div>
+                {selectedJobForDetail.url && (
+                  <a
+                    href={selectedJobForDetail.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/40 hover:bg-blue-50 transition"
+                  >
+                    <span>Abrir en portal</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="p-4 bg-gray-50 dark:bg-zinc-900/80 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-3">
+              <button
+                onClick={() => setSelectedJobForDetail(null)}
+                className="px-4 py-2 rounded-xl text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-800 transition"
+              >
+                Cerrar
+              </button>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => {
+                    handleTrackJob(selectedJobForDetail);
+                  }}
+                  className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition ${
+                    isTracked(selectedJobForDetail)
+                      ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+                      : 'border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-800 dark:text-white'
+                  }`}
+                >
+                  {isTracked(selectedJobForDetail) ? (
+                    <>
+                      <BookmarkCheck className="w-3.5 h-3.5 text-blue-600" />
+                      <span>En Seguimiento</span>
+                    </>
+                  ) : (
+                    <>
+                      <BookmarkPlus className="w-3.5 h-3.5 text-blue-600" />
+                      <span>+ Seguimiento</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => {
+                    const j = selectedJobForDetail;
+                    setSelectedJobForDetail(null);
+                    onApply(j);
+                  }}
+                  className="flex items-center space-x-1 px-3.5 py-2 rounded-xl text-xs font-semibold border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-800 dark:text-white transition"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Adaptar CV</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const j = selectedJobForDetail;
+                    handleOneClickApply(j);
+                  }}
+                  className="flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Postular Ahora</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* 5D Fit Evaluation Modal */}
       {selectedEvaluation && (
@@ -753,61 +1056,40 @@ export const JobRadar: React.FC<JobRadarProps> = ({ jobs, profile, onRefresh, on
               </div>
             </div>
 
-            {/* Strengths & Missing Skills */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Strengths & Gaps */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="space-y-2">
-                <h5 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center space-x-1">
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  <span>Fortalezas que Cumples:</span>
-                </h5>
-                <ul className="text-xs text-gray-600 dark:text-gray-300 space-y-1">
-                  {selectedEvaluation.candidate_strengths.length > 0 ? (
-                    selectedEvaluation.candidate_strengths.map((s, i) => (
-                      <li key={i} className="flex items-start space-x-1.5">
-                        <span className="text-emerald-500">✓</span>
-                        <span>{s}</span>
-                      </li>
-                    ))
-                  ) : (
-                    <li className="text-gray-400 text-xs">Sin fortalezas destacadas registradas.</li>
-                  )}
+                <h5 className="font-semibold text-emerald-600 dark:text-emerald-400">Fortalezas Clave</h5>
+                <ul className="list-disc list-inside space-y-1 text-gray-600 dark:text-gray-300">
+                  {selectedEvaluation.strengths.map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
                 </ul>
               </div>
-
               <div className="space-y-2">
-                <h5 className="text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center space-x-1">
-                  <ChevronRight className="w-3.5 h-3.5" />
-                  <span>Habilidades / Brechas Faltantes:</span>
-                </h5>
-                <ul className="text-xs text-gray-600 dark:text-gray-300 space-y-1">
-                  {selectedEvaluation.missing_skills.length > 0 ? (
-                    selectedEvaluation.missing_skills.map((m, i) => (
-                      <li key={i} className="flex items-start space-x-1.5">
-                        <span className="text-amber-500">•</span>
-                        <span>{m}</span>
-                      </li>
-                    ))
-                  ) : (
-                    <li className="text-gray-400 text-xs">No se detectaron brechas críticas.</li>
-                  )}
+                <h5 className="font-semibold text-amber-600 dark:text-amber-400">Brechas Detectadas</h5>
+                <ul className="list-disc list-inside space-y-1 text-gray-600 dark:text-gray-300">
+                  {selectedEvaluation.gaps.map((g, i) => (
+                    <li key={i}>{g}</li>
+                  ))}
                 </ul>
               </div>
             </div>
 
-            {/* Recommendation summary */}
-            <div className="p-3.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-900/30 text-xs text-blue-900 dark:text-blue-200 leading-relaxed">
-              <strong>Veredicto del Agente:</strong> {selectedEvaluation.recommendation_summary}
+            {/* Recommended Action */}
+            <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/40 space-y-1">
+              <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">Acción Estratégica Recomendada:</span>
+              <p className="text-xs text-blue-900 dark:text-blue-200">{selectedEvaluation.recommended_action}</p>
             </div>
 
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setSelectedEvaluation(null)}
-                className="px-5 py-2 rounded-xl text-xs font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:opacity-90 transition"
+                className="px-4 py-2 rounded-xl text-xs font-medium bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 transition"
               >
                 Cerrar Diagnóstico
               </button>
             </div>
-
           </div>
         </div>
       )}

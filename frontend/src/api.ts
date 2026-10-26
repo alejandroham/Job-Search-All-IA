@@ -65,8 +65,30 @@ export const api = {
     const res = await fetch(url);
     return res.json();
   },
-  deleteJob: async (job_id: string): Promise<{ message: string }> => {
-    const res = await fetch(`${API_BASE}/jobs/${job_id}`, { method: 'DELETE' });
+  trackJob: async (job_id: string): Promise<JobPosting> => {
+    const res = await fetch(`${API_BASE}/jobs/${job_id}/track`, {
+      method: 'POST'
+    });
+    return res.json();
+  },
+  updateJob: async (job_id: string, data: Partial<JobPosting>): Promise<JobPosting> => {
+    const res = await fetch(`${API_BASE}/jobs/${job_id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+  classifyJob: async (job_id: string, data: { status: string; reason?: string; feedback?: string }): Promise<JobPosting> => {
+    const res = await fetch(`${API_BASE}/jobs/${job_id}/classify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+  deleteJob: async (job_id: string, from_section: 'radar' | 'tracker' = 'radar'): Promise<{ message: string }> => {
+    const res = await fetch(`${API_BASE}/jobs/${job_id}?from_section=${from_section}`, { method: 'DELETE' });
     return res.json();
   },
   clearAllJobs: async (): Promise<{ message: string }> => {

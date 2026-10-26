@@ -189,15 +189,42 @@ def batch_rank_jobs():
 
     return {"message": f"{evaluated_count} ofertas evaluadas y ordenadas por ajuste."}
 
+@app.post("/api/jobs/{job_id}/track", response_model=JobPosting)
+def track_job_endpoint(job_id: str):
+    job = db.track_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Empleo no encontrado")
+    return job
+
+@app.put("/api/jobs/{job_id}", response_model=JobPosting)
+def update_job_endpoint(job_id: str, data: dict):
+    updated = db.update_job(job_id, data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Empleo no encontrado")
+    return updated
+
+@app.post("/api/jobs/{job_id}/classify", response_model=JobPosting)
+def classify_job_endpoint(job_id: str, data: dict):
+    status = data.get("status")
+    if status not in ("offer", "rejected", "applied", "interviewing", "saved", "responded"):
+        raise HTTPException(status_code=400, detail="Estado de clasificación inválido")
+    reason = data.get("reason")
+    feedback = data.get("feedback")
+    classified = db.classify_job(job_id, status=status, reason=reason, feedback=feedback)
+    if not classified:
+        raise HTTPException(status_code=404, detail="Empleo no encontrado")
+    return classified
+
 @app.delete("/api/jobs/{job_id}")
-def delete_job(job_id: str):
-    db.delete_job(job_id)
-    return {"message": "Oportunidad eliminada exitosamente"}
+def delete_job(job_id: str, from_section: str = "radar"):
+    db.delete_job(job_id, from_section=from_section)
+    msg = "Oportunidad descartada del Radar" if from_section == "radar" else "Registro eliminado del Seguimiento"
+    return {"message": msg}
 
 @app.delete("/api/jobs")
 def clear_all_jobs():
-    db.clear_jobs()
-    return {"message": "Radar limpiado exitosamente"}
+    db.clear_radar_jobs()
+    return {"message": "Radar limpiado exitosamente. Las ofertas en Seguimiento se mantienen protegidas."}
 
 @app.put("/api/jobs/{job_id}/status")
 def update_job_status_endpoint(job_id: str, data: dict):

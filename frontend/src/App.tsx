@@ -117,12 +117,15 @@ export function App() {
                   setPreferences(updatedPrefs);
                 }}
                 onApply={handleApplyToJob}
+                onNavigateToTracker={() => setActiveTab('tracker')}
               />
             )}
 
             {activeTab === 'tracker' && (
               <PipelineTracker
                 jobs={jobs}
+                applications={applications}
+                profile={profile}
                 onRefresh={async () => {
                   const updated = await api.getJobs();
                   setJobs(updated);

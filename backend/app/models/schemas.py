@@ -64,18 +64,45 @@ class JobPosting(BaseModel):
     salary_range: Optional[str] = None
     description: str
     url: Optional[str] = None
-    source: str = "direct" # "remoteok", "arbeitnow", "remotive", "freehire", "linkedin", "manual"
+    source: str = "direct" # "remoteok", "arbeitnow", "remotive", "freehire", "linkedin", "manual", "getonbrd", "chiletrabajos", "computrabajo", "laborum"
     tags: List[str] = []
-    posted_at: Optional[str] = None
+
+    # Dates
+    posted_at: Optional[str] = None          # Fecha de publicación
+    deadline: Optional[str] = None           # Fecha de término / vencimiento
     discovered_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    tracked_at: Optional[str] = None         # Fecha de incorporación al Seguimiento
+    applied_date: Optional[str] = None       # Fecha en que se envió la postulación
+
+    # Status & Pipeline
     fit_score: Optional[int] = None
-    status: str = "discovered" # "discovered", "saved", "applied", "interviewing", "offer", "rejected", "archived"
-    notes: Optional[str] = None
-    outcome: Optional[str] = None # e.g. "offer_received", "interview_round_2", "rejected_technical", "ghosted"
+    # "discovered": en radar
+    # "saved": en seguimiento (pendiente de postulación)
+    # "applied": postulada / enviada
+    # "interviewing": en proceso / entrevistas
+    # "responded": respondida por la empresa
+    # "offer": Oferta / Exitoso (categoría final favorable)
+    # "rejected": Cerrado / No Exitoso (categoría final no favorable)
+    status: str = "discovered"
+    in_radar: bool = True
+
+    # Application details & Associated documents
+    application_method: Optional[str] = None # "url" | "email"
+    contact_email: Optional[str] = None
+    email_subject: Optional[str] = None
+    email_body: Optional[str] = None
+    tailored_cv_markdown: Optional[str] = None
+    tailored_cv_html: Optional[str] = None
+    tailored_cover_letter: Optional[str] = None
+    user_notes: Optional[str] = None
+
+    # Outcome & Analytics
+    outcome: Optional[str] = None
     outcome_notes: Optional[str] = None
     outcome_success: Optional[bool] = None
-    applied_date: Optional[str] = None
-    contact_email: Optional[str] = None
+    outcome_reason: Optional[str] = None
+    outcome_feedback: Optional[str] = None
+    outcome_date: Optional[str] = None
     upskill_recommendations: List[str] = []
 
 class OutcomeSubmission(BaseModel):

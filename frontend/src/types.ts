@@ -61,16 +61,37 @@ export interface JobPosting {
   url?: string;
   source: string;
   tags: string[];
+  
+  // Dates
   posted_at?: string;
+  deadline?: string;
   discovered_at: string;
+  tracked_at?: string;
+  applied_date?: string;
+
+  // Pipeline & Status
   fit_score?: number;
-  status: 'discovered' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'rejected' | 'archived';
+  status: 'discovered' | 'saved' | 'applied' | 'interviewing' | 'responded' | 'offer' | 'rejected' | 'archived';
+  in_radar?: boolean;
+
+  // Channel & Associated Documents
+  application_method?: 'url' | 'email';
+  contact_email?: string;
+  email_subject?: string;
+  email_body?: string;
+  tailored_cv_markdown?: string;
+  tailored_cv_html?: string;
+  tailored_cover_letter?: string;
+  user_notes?: string;
+
+  // Outcome details
   notes?: string;
   outcome?: string;
   outcome_notes?: string;
   outcome_success?: boolean;
-  applied_date?: string;
-  contact_email?: string;
+  outcome_reason?: string;
+  outcome_feedback?: string;
+  outcome_date?: string;
   upskill_recommendations?: string[];
 }
 
