@@ -206,7 +206,14 @@ def update_job_endpoint(job_id: str, data: dict):
 @app.post("/api/jobs/{job_id}/classify", response_model=JobPosting)
 def classify_job_endpoint(job_id: str, data: dict):
     status = data.get("status")
-    if status not in ("offer", "rejected", "applied", "interviewing", "saved", "responded"):
+    allowed_statuses = (
+        "offer", "rejected", "applied", "interviewing", "saved", "responded",
+        "eval_pending", "eval_approved", "eval_discarded",
+        "preparing", "ready_to_send", "pending_send",
+        "applied_no_response", "contact_received",
+        "interview_scheduled", "interview_done", "in_evaluation", "final_stage"
+    )
+    if status not in allowed_statuses:
         raise HTTPException(status_code=400, detail="Estado de clasificación inválido")
     reason = data.get("reason")
     feedback = data.get("feedback")

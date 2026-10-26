@@ -58,7 +58,7 @@ class UserPreferences(BaseModel):
 class TrackingHistoryEvent(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    event_type: str = "note" # "saved", "applied", "interview", "responded", "technical_test", "offer", "rejected", "note"
+    event_type: str = "note" # "evaluation", "preparation", "applied", "contact_received", "interview", "technical_test", "final_stage", "offer", "rejected", "note"
     title: str
     date: Optional[str] = None
     notes: Optional[str] = None
@@ -80,17 +80,17 @@ class JobPosting(BaseModel):
     deadline: Optional[str] = None           # Fecha de término / vencimiento
     discovered_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     tracked_at: Optional[str] = None         # Fecha de incorporación al Seguimiento
-    applied_date: Optional[str] = None       # Fecha en que se envió la postulación
+    applied_date: Optional[str] = None       # Fecha en que se envió la postulación (confirmada)
+    reminder_date: Optional[str] = None      # Fecha de recordatorio / seguimiento
 
-    # Status & Pipeline
+    # Status & Pipeline (6 Etapas estructuradas)
     fit_score: Optional[int] = None
-    # "discovered": en radar
-    # "saved": en seguimiento (pendiente de postulación)
-    # "applied": postulada / enviada (CV enviado)
-    # "interviewing": en proceso (en entrevistas)
-    # "responded": en proceso (respondida por la empresa)
-    # "offer": Oferta / Exitoso (categoría final favorable)
-    # "rejected": Cerrado / No Exitoso (categoría final no favorable)
+    # Etapa 1 Radar: "discovered"
+    # Etapa 2 Evaluación: "eval_pending" | "eval_approved" | "eval_discarded" (legacy: "saved")
+    # Etapa 3 Preparación: "preparing" | "ready_to_send"
+    # Etapa 4 Postulación: "pending_send" | "applied"
+    # Etapa 5 Seguimiento (En Proceso): "applied_no_response" | "contact_received" | "interview_scheduled" | "interview_done" | "in_evaluation" | "final_stage" (legacy: "interviewing", "responded")
+    # Etapa 6 Decisión: "offer" (Exitoso) | "rejected" (No Exitoso)
     status: str = "discovered"
     in_radar: bool = True
 
@@ -103,6 +103,8 @@ class JobPosting(BaseModel):
     tailored_cv_html: Optional[str] = None
     tailored_cover_letter: Optional[str] = None
     user_notes: Optional[str] = None
+    evaluation_notes: Optional[str] = None   # Observaciones, brechas y prioridades
+    application_proof: Optional[str] = None  # Número de confirmación, ID de postulación o comprobante
 
     # Historical Tracking Log (Cronología / Bitácora de eventos del proceso)
     history: List[TrackingHistoryEvent] = []

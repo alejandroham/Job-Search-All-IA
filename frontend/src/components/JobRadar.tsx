@@ -232,15 +232,11 @@ export const JobRadar: React.FC<JobRadarProps> = ({
 
     try {
       await api.trackJob(job.id);
-      await api.updateJob(job.id, {
-        status: 'applied',
-        applied_date: new Date().toISOString()
-      });
       setFeedbackMsg(prev => ({
         ...prev,
         [job.id]: email
-          ? '¡Correo preparado y oferta guardada en Seguimiento!'
-          : '¡Portal abierto y oferta guardada en Seguimiento!'
+          ? '¡Correo abierto! Oferta guardada en Seguimiento (Pendiente de confirmación de envío).'
+          : '¡Portal abierto! Oferta guardada en Seguimiento (Pendiente de confirmación de envío).'
       }));
       setTimeout(() => {
         setFeedbackMsg(prev => {
@@ -251,7 +247,7 @@ export const JobRadar: React.FC<JobRadarProps> = ({
       }, 4000);
       onRefresh();
     } catch (e) {
-      console.error('Error al registrar postulación:', e);
+      console.error('Error al registrar en seguimiento:', e);
     } finally {
       setApplyingJobId(null);
     }

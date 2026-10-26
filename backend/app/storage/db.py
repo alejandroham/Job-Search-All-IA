@@ -135,16 +135,16 @@ class Database:
             target.tracked_at = now_iso
         
         if target.status == "discovered":
-            target.status = "saved"
+            target.status = "eval_pending"
 
         # Initialize tracking history if empty
         if not target.history:
             target.history.append(
                 TrackingHistoryEvent(
-                    event_type="saved",
-                    title="Oferta guardada en Seguimiento (Pendiente)",
+                    event_type="evaluation",
+                    title="Etapa de Evaluación: Pendiente de revisión",
                     date=now_iso[:10],
-                    notes="Incorporada desde el Radar de Búsqueda."
+                    notes="Oferta incorporada al Seguimiento para evaluar ajuste, requisitos y brechas."
                 )
             )
 
@@ -273,11 +273,16 @@ class Database:
 
         # Automatic status progression based on event type
         ev_type = event.event_type
-        if ev_type == "interview":
-            target.status = "interviewing"
-        elif ev_type == "responded":
-            if target.status in ("saved", "applied"):
-                target.status = "responded"
+        if ev_type in ("interview", "interview_scheduled"):
+            target.status = "interview_scheduled"
+        elif ev_type == "interview_done":
+            target.status = "interview_done"
+        elif ev_type in ("responded", "contact_received"):
+            target.status = "contact_received"
+        elif ev_type in ("technical_test", "in_evaluation"):
+            target.status = "in_evaluation"
+        elif ev_type == "final_stage":
+            target.status = "final_stage"
         elif ev_type == "applied":
             target.status = "applied"
             if not target.applied_date:

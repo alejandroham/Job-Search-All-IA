@@ -53,7 +53,20 @@ export interface UserPreferences {
 export interface TrackingHistoryEvent {
   id: string;
   timestamp: string;
-  event_type: 'saved' | 'applied' | 'interview' | 'responded' | 'technical_test' | 'note' | 'offer' | 'rejected';
+  event_type:
+    | 'evaluation'
+    | 'preparation'
+    | 'applied'
+    | 'contact_received'
+    | 'interview'
+    | 'interview_done'
+    | 'technical_test'
+    | 'final_stage'
+    | 'offer'
+    | 'rejected'
+    | 'note'
+    | 'saved'
+    | 'responded';
   title: string;
   date?: string;
   notes?: string;
@@ -77,10 +90,37 @@ export interface JobPosting {
   discovered_at: string;
   tracked_at?: string;
   applied_date?: string;
+  reminder_date?: string;
 
-  // Pipeline & Status
+  // Pipeline & Status (6 Etapas Estructuradas)
   fit_score?: number;
-  status: 'discovered' | 'saved' | 'applied' | 'interviewing' | 'responded' | 'offer' | 'rejected' | 'archived';
+  status:
+    | 'discovered'
+    // Etapa 2: Evaluación
+    | 'eval_pending'
+    | 'eval_approved'
+    | 'eval_discarded'
+    // Etapa 3: Preparación
+    | 'preparing'
+    | 'ready_to_send'
+    // Etapa 4: Postulación
+    | 'pending_send'
+    | 'applied'
+    // Etapa 5: Seguimiento / En Proceso
+    | 'applied_no_response'
+    | 'contact_received'
+    | 'interview_scheduled'
+    | 'interview_done'
+    | 'in_evaluation'
+    | 'final_stage'
+    // Etapa 6: Decisión
+    | 'offer'
+    | 'rejected'
+    // Compatibilidad legada
+    | 'saved'
+    | 'interviewing'
+    | 'responded'
+    | 'archived';
   in_radar?: boolean;
 
   // Channel & Associated Documents
@@ -92,6 +132,8 @@ export interface JobPosting {
   tailored_cv_html?: string;
   tailored_cover_letter?: string;
   user_notes?: string;
+  evaluation_notes?: string;
+  application_proof?: string;
 
   // Historical Tracking Log (Bitácora de eventos del proceso)
   history?: TrackingHistoryEvent[];

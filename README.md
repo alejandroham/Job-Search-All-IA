@@ -32,32 +32,70 @@ Un marco de trabajo inteligente y autónomo inspirado en [`ai-job-search`](https
   - 🔴 *Oferta Vencida*
   - ⚪ *Sin fecha de término conocida*
 - **Modal de Detalle Completo:** Inspecciona requisitos, condiciones, rango salarial, tags y descripción íntegra con saltos de línea preservados.
-- **Postulación en 1 Clic:**
-  - Si la vacante se postula por enlace: abre el portal original y actualiza el estado.
-  - Si la vacante incluye correo de contacto: genera y pre-llena un correo formal personalizado con asunto y cuerpo profesional mediante `mailto:`.
+- **Apertura de Canales sin Falsos Positivos:** Abrir el portal web de postulación o generar el borrador de correo abre el canal correspondiente y guarda la oportunidad en seguimiento, **sin marcarla erróneamente como enviada**.
 - **Limpieza Segura del Radar:** Vacía ofertas descubiertas sin tocar ni afectar jamás los registros guardados en Seguimiento.
 
-### 4. Módulo de Seguimiento de Postulaciones (Pipeline Tracker)
+### 4. Gestión Integral de Postulaciones (Flujo Lineal de 6 Etapas)
 Convierte el seguimiento en un **registro personal, persistente e inviolable**. Una oferta enviada a Seguimiento nunca se borra automáticamente por limpieza de radar o vencimiento de plazos.
 
-#### Ciclo de Vida de Postulaciones Activas:
-1. 🟡 **Guardada / Pendiente (`saved`):** Oportunidades seleccionadas en espera de preparación de antecedentes.
-2. 🟠 **CV Enviado / Postulado (`applied`):** Registro de envío con fecha exacta.
-3. 🟣 **En Proceso (`interviewing` / `responded`):** Convocatorias con contacto o etapas evaluativas activas.
+```
+1. RADAR ──(+ Seguimiento)──► 2. EVALUACIÓN (Pendiente de revisión | Apta | Descartada)
+                                     │
+                                     ▼ (Si es Apta)
+                              3. PREPARACIÓN (En preparación CV/Carta/Correo | Listo para enviar)
+                                     │
+                                     ▼ (Envío manual en portal/correo)
+                              4. POSTULACIÓN (Pendiente de envío ──Confirmación real──► Enviada)
+                                     │
+                                     ▼
+                              5. SEGUIMIENTO (Enviada sin respuesta | Contacto | Entrevistas | En evaluación)
+                                     │
+                                     ▼ (Fin del proceso)
+                              6. DECISIÓN (🏆 Oferta / Exitoso  o  📁 Cerrado / No Exitoso)
+```
 
-#### Registro Histórico y Bitácora del Proceso (Timeline):
-- Registra cronológicamente cada hito del proceso de selección:
-  - 👥 **Entrevistas:** RRHH, pruebas técnicas, entrevistas con gerentes o paneles finales.
-  - 📞 **Respuestas de la Empresa:** Primer contacto por correo, LinkedIn o llamadas.
-  - 💻 **Pruebas Técnicas:** Desafíos de código, retos para la casa o assessments.
-  - 📝 **Notas de Seguimiento:** Apuntes sobre preguntas, impresiones y avances.
-- Cronología visual que actualiza automáticamente la etapa del proceso al añadir eventos.
+#### Detalle de las 6 Etapas:
 
-#### Clasificación Final según el Resultado:
-- 🏆 **Oferta / Exitoso (`offer`):** Convocatorias que terminaron favorablemente con oferta formal o contratación.
-- 📁 **Cerrado / No Exitoso (`rejected`):** Procesos que finalizaron sin oferta, con opción de generar un **Plan de Upskilling IA** para cerrar brechas de habilidades.
-- **Historial Completo Preservado:** Toda la documentación, notas y fechas se conservan al archivar en categorías finales.
-- **Reversibilidad:** Acción *"Reabrir Postulación"* disponible si se clasificó por error.
+1. **Etapa 1: Radar (Descubrimiento):**
+   - Rastreo en portales chilenos e internacionales.
+   - Decisión de incorporar a seguimiento con el botón `+ Seguimiento`.
+
+2. **Etapa 2: Evaluación (Decidir si postular):**
+   - Analiza el ajuste dimensional del candidato frente a la vacante.
+   - Identifica requisitos obligatorios, deseables, observaciones y brechas.
+   - Estados:
+     - 🟡 **Pendiente de revisión:** Oportunidad guardada para análisis.
+     - 🔵 **Apta para postular:** Cumple condiciones y avanza a preparación de CV.
+     - ⚪ **Descartada en evaluación:** Se archiva en la sub-pestaña de descartadas con sus motivos, sin ensuciar las postulaciones activas.
+
+3. **Etapa 3: Preparación (Personalizar la postulación):**
+   - Adaptación del CV y carta de presentación con IA (*Drafter-Reviewer*).
+   - Redacción y personalización del correo de postulación para el reclutador.
+   - Estados:
+     - 🟣 **En preparación:** Documentos en borrador o ajuste.
+     - 🟢 **Listo para enviar:** Documentos aprobados y listos para postular.
+
+4. **Etapa 4: Postulación (Enviar candidatura):**
+   - Envío mediante el canal correspondiente (Portal web de la empresa, correo, LinkedIn Easy Apply, referido).
+   - **Confirmación Explícita de Envío:** Modal donde el usuario registra la fecha real de envío, canal, notas y **número de comprobante o ID de solicitud**.
+   - Solo tras esta confirmación formal la candidatura pasa a estar **Enviada** en Seguimiento.
+
+5. **Etapa 5: Seguimiento (Control activo del proceso):**
+   - Estados dinámicos:
+     - ✉️ *Enviada (Sin respuesta aún)*
+     - 📞 *Contacto recibido*
+     - 👥 *Entrevista agendada*
+     - 👥 *Entrevista realizada*
+     - 💻 *En evaluación / Prueba técnica*
+     - 🎯 *Etapa final*
+   - **Bitácora y Cronología Histórica:** Registro de cada hito, entrevista, notas de reclutadores y feedback.
+   - **Recordatorios de Follow-up:** Programación de fechas para consultar estado si la empresa no responde.
+
+6. **Etapa 6: Decisión (Resultado del proceso):**
+   - 🏆 **Oferta / Exitoso (`offer`):** Convocatorias concluidas favorablemente con oferta laboral formal o contratación.
+   - 📁 **Cerrado / No Exitoso (`rejected`):** Rechazos, convocatorias cerradas o retiros voluntarios, con opción de generar un **Plan de Upskilling IA** para cerrar brechas de habilidades.
+   - **Regla Fundamental:** Ninguna postulación se cierra sola por vencimiento de plazo o falta de respuesta; el usuario mantiene el control absoluto.
+   - **Reversibilidad:** Botón *"Reabrir Postulación"* disponible para devolver el registro al seguimiento activo si se cerró por error.
 
 ### 5. Documentos Asociados & Exportación Impecable
 - **CV Adaptado por Oferta:** Visualiza el CV en Markdown diseñado para esa vacante específica.
