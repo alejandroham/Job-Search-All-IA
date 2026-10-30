@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   Globe,
@@ -20,9 +20,20 @@ import {
   Clock,
   BookmarkPlus,
   BookmarkCheck,
+  Building2,
+  Cpu,
+  Target,
+  CheckCircle2,
+  XCircle,
+  HelpCircle,
+  RefreshCw,
+  Play,
+  Layers,
+  ChevronDown,
+  ChevronUp,
   X
 } from 'lucide-react';
-import type { JobPosting, FitEvaluation, CandidateProfile } from '../types';
+import type { JobPosting, FitEvaluation, CandidateProfile, RoleRecommendation, GeneratedATSQuery, CompanyDirectoryItem } from '../types';
 import { api } from '../api';
 import { formatDisplayDate, getOfferExpirationBadge } from '../utils/dateUtils';
 
@@ -62,6 +73,76 @@ export const JobRadar: React.FC<JobRadarProps> = ({
     return (localStorage.getItem('job_radar_view_mode') as 'grid3' | 'grid2' | 'list') || 'grid3';
   });
 
+  // Dynamic ATS & Intelligent Radar States (Sección 5 & 4 del Radar Inteligente)
+  const [roleRecs, setRoleRecs] = useState<RoleRecommendation[]>([]);
+  const [atsQueries, setAtsQueries] = useState<GeneratedATSQuery[]>([]);
+  const [companies, setCompanies] = useState<CompanyDirectoryItem[]>([]);
+  const [isLoadingRecs, setIsLoadingRecs] = useState(false);
+  const [isExecutingATSQuery, setIsExecutingATSQuery] = useState<string | null>(null);
+  const [showATSExplorer, setShowATSExplorer] = useState(false);
+  const [showCompaniesCatalog, setShowCompaniesCatalog] = useState(false);
+  const [selectedCompanyCountry, setSelectedCompanyCountry] = useState<string>('all');
+  const [selectedCompanyIndustry, setSelectedCompanyIndustry] = useState<string>('all');
+  const [companySearch, setCompanySearch] = useState('');
+
+  const loadATSData = async () => {
+    try {
+      const [recs, queries, comps] = await Promise.all([
+        api.getRoleRecommendations(),
+        api.getATSQueries(),
+        api.getCompanies()
+      ]);
+      setRoleRecs(recs);
+      setAtsQueries(queries);
+      setCompanies(comps);
+    } catch (e) {
+      console.warn('Error cargando recomendaciones ATS:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadATSData();
+  }, []);
+
+  const handleRefreshRecommendations = async () => {
+    setIsLoadingRecs(true);
+    try {
+      const recs = await api.getRoleRecommendations(true);
+      setRoleRecs(recs);
+      const queries = await api.getATSQueries();
+      setAtsQueries(queries);
+    } catch (e) {
+      alert('Error recalculando roles: ' + e);
+    } finally {
+      setIsLoadingRecs(false);
+    }
+  };
+
+  const handleToggleRecStatus = async (recId: string, currentStatus?: boolean | null) => {
+    try {
+      const next = currentStatus === true ? false : true;
+      const updated = await api.updateRoleRecStatus(recId, next);
+      setRoleRecs(prev => prev.map(r => r.id === recId ? updated : r));
+      const queries = await api.getATSQueries();
+      setAtsQueries(queries);
+    } catch (e) {
+      alert('Error actualizando rol: ' + e);
+    }
+  };
+
+  const handleRunATSQuery = async (queryText: string) => {
+    setIsExecutingATSQuery(queryText);
+    try {
+      const res = await api.scrapeCustomATSQuery(queryText);
+      alert(res.message);
+      onRefresh();
+    } catch (e: any) {
+      alert('Error ejecutando consulta ATS: ' + (e?.message || e));
+    } finally {
+      setIsExecutingATSQuery(null);
+    }
+  };
+
   const handleSetViewMode = (mode: 'grid3' | 'grid2' | 'list') => {
     setViewMode(mode);
     localStorage.setItem('job_radar_view_mode', mode);
@@ -85,6 +166,12 @@ export const JobRadar: React.FC<JobRadarProps> = ({
       computrabajo: '🇨🇱 CompuTrabajo',
       chiletrabajos: '🇨🇱 ChileTrabajos',
       laborum: '🇨🇱 Laborum',
+      ats_greenhouse: '🏢 Greenhouse ATS',
+      ats_lever: '🏢 Lever ATS',
+      ats_ashby: '🏢 Ashby ATS',
+      ats_workday: '🏢 Workday ATS',
+      ats_smartrecruiters: '🏢 SmartRecruiters',
+      ats_direct: '🏢 ATS Corporativo',
       remotive: '🌍 Remotive',
       arbeitnow: '🌍 Arbeitnow',
       remoteok: '🌍 RemoteOK',
@@ -287,20 +374,48 @@ export const JobRadar: React.FC<JobRadarProps> = ({
       
       {/* Control Banner & Autonomous Search */}
       <div className="apple-glass apple-card p-6 space-y-4">
+        {/* Top Control Bar with ATS Explorer Toggle */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white flex items-center space-x-2">
-              <span>Radar de Búsqueda (Chile & Global)</span>
+              <span>Radar Inteligente (Chile, ATS Corporativo & Global)</span>
               <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-medium">
                 En vivo
               </span>
             </h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Escanea simultáneamente portales chilenos (GetOnBoard, CompuTrabajo, ChileTrabajos, Laborum, LinkedIn CL) y remotos mundiales.
+              Rastreo simultáneo en portales chilenos, sistemas ATS corporativos (Workday, Greenhouse, Lever, Ashby) y vacantes remotas mundiales.
             </p>
           </div>
 
           <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+            <button
+              onClick={() => setShowATSExplorer(!showATSExplorer)}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                showATSExplorer
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/40 hover:bg-blue-100'
+              }`}
+              title="Explorar familias de roles y consultas inteligentes ATS inferidas de tu CV"
+            >
+              <Cpu className="w-3.5 h-3.5" />
+              <span>Estrategia ATS (CV)</span>
+              {showATSExplorer ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+
+            <button
+              onClick={() => setShowCompaniesCatalog(!showCompaniesCatalog)}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition ${
+                showCompaniesCatalog
+                  ? 'bg-zinc-800 text-white'
+                  : 'bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
+              }`}
+              title="Ver catálogo de empresas y portales de contratación"
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>Directorio Empresas ({companies.length})</span>
+            </button>
+
             <button
               onClick={handleBatchRank}
               disabled={isBatchRanking || filteredJobs.length === 0}
@@ -322,6 +437,221 @@ export const JobRadar: React.FC<JobRadarProps> = ({
             </button>
           </div>
         </div>
+
+        {/* ATS & Dynamic Roles Explorer Panel (Sección 5 del documento) */}
+        {showATSExplorer && (
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50/80 via-white to-purple-50/60 dark:from-zinc-900/90 dark:via-zinc-900/60 dark:to-zinc-800/80 border border-blue-200/60 dark:border-blue-900/40 space-y-4 animate-fade-in text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Target className="w-4 h-4 text-blue-600" />
+                <h3 className="font-bold text-gray-900 dark:text-white">
+                  Estrategia de Roles Dinámicos & Consultas ATS (Basado en tu CV)
+                </h3>
+              </div>
+              <button
+                onClick={handleRefreshRecommendations}
+                disabled={isLoadingRecs}
+                className="flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white dark:bg-zinc-800 border border-black/5 hover:bg-gray-50 text-blue-600 transition"
+                title="Recalcular análisis de roles contra tu CV"
+              >
+                <RefreshCw className={`w-3 h-3 ${isLoadingRecs ? 'animate-spin' : ''}`} />
+                <span>{isLoadingRecs ? 'Analizando CV...' : 'Re-analizar Roles'}</span>
+              </button>
+            </div>
+
+            <p className="text-gray-600 dark:text-gray-300 leading-relaxed text-[11px]">
+              La IA infiere familias de cargos a partir de la evidencia demostrable en tu perfil, distinguiendo entre <strong>Coincidencia Directa</strong>, <strong>Transferencia de Habilidades</strong> y <strong>Oportunidades Exploratorias</strong>.
+            </p>
+
+            {/* Recommended Role Families Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {roleRecs.map((rec) => {
+                const isApproved = rec.approved_by_user !== false;
+                const typeBadge = {
+                  direct: { label: 'Coincidencia Directa', class: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                  transferable: { label: 'Habilidad Transferible', class: 'bg-blue-50 text-blue-700 border-blue-200' },
+                  exploratory: { label: 'Exploratoria', class: 'bg-purple-50 text-purple-700 border-purple-200' }
+                }[rec.recommendation_type] || { label: rec.recommendation_type, class: 'bg-gray-100 text-gray-700 border-gray-200' };
+
+                return (
+                  <div
+                    key={rec.id}
+                    className={`p-3.5 rounded-xl border transition flex flex-col justify-between ${
+                      isApproved
+                        ? 'bg-white/80 dark:bg-zinc-800/80 border-blue-300 dark:border-blue-800 shadow-2xs'
+                        : 'bg-gray-50/50 dark:bg-zinc-900/40 border-gray-200 opacity-60'
+                    }`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${typeBadge.class}`}>
+                          {typeBadge.label}
+                        </span>
+                        <span className="text-[10px] text-gray-400 font-medium">{rec.seniority}</span>
+                      </div>
+
+                      <h4 className="font-bold text-gray-900 dark:text-white text-xs mt-1">
+                        {rec.role_family}
+                      </h4>
+
+                      <div className="flex flex-wrap gap-1">
+                        {rec.suggested_titles.map((t, idx) => (
+                          <span key={idx} className="text-[10px] px-1.5 py-0.2 rounded bg-gray-100 dark:bg-zinc-700 text-gray-700 dark:text-gray-300">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+
+                      <p className="text-[11px] text-gray-600 dark:text-gray-300 leading-snug pt-1">
+                        {rec.reasoning}
+                      </p>
+                    </div>
+
+                    <div className="pt-3 border-t border-black/5 dark:border-white/5 flex items-center justify-between text-[11px] mt-2">
+                      <span className="text-gray-500">
+                        {isApproved ? '✓ Incluida en búsquedas' : '✗ Descartada'}
+                      </span>
+                      <button
+                        onClick={() => handleToggleRecStatus(rec.id, rec.approved_by_user)}
+                        className={`px-2 py-0.5 rounded-lg font-semibold transition ${
+                          isApproved
+                            ? 'text-red-600 hover:bg-red-50'
+                            : 'text-blue-600 hover:bg-blue-50 font-bold'
+                        }`}
+                      >
+                        {isApproved ? 'Descartar' : 'Activar'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Generated ATS Queries Bar (Dorks listos para ejecutar) */}
+            <div className="pt-2 border-t border-black/5 dark:border-white/5 space-y-2">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-gray-500 block">
+                Consultas Booleanas ATS Generadas (Google / DuckDuckGo Dorks):
+              </span>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {atsQueries.slice(0, 4).map((q) => (
+                  <div
+                    key={q.id}
+                    className="p-2.5 rounded-xl bg-white dark:bg-zinc-800 border border-black/5 flex items-center justify-between gap-2"
+                  >
+                    <div className="space-y-0.5 overflow-hidden">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                          {q.target_platform}
+                        </span>
+                        <span className="text-[10px] text-gray-400">• {q.role_family}</span>
+                      </div>
+                      <p className="font-mono text-[10px] text-gray-700 dark:text-gray-300 truncate" title={q.query_text}>
+                        {q.query_text}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => handleRunATSQuery(q.query_text)}
+                      disabled={isExecutingATSQuery === q.query_text}
+                      className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[10px] flex items-center space-x-1 shrink-0 transition disabled:opacity-50"
+                      title="Ejecutar esta consulta directamente contra el ATS corporativo"
+                    >
+                      <Play className="w-2.5 h-2.5" />
+                      <span>{isExecutingATSQuery === q.query_text ? 'Rastreando...' : 'Buscar'}</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Companies Directory Catalog Panel (Sección 4 del documento) */}
+        {showCompaniesCatalog && (
+          <div className="p-4 rounded-2xl bg-gray-50/80 dark:bg-zinc-900/80 border border-black/5 dark:border-white/5 space-y-3 animate-fade-in text-xs">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center space-x-2">
+                <Building2 className="w-4 h-4 text-purple-600" />
+                <h3 className="font-bold text-gray-900 dark:text-white">
+                  Directorio de Empresas con Portales ATS ({companies.length} empleadores)
+                </h3>
+              </div>
+
+              <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                <input
+                  type="text"
+                  placeholder="Filtrar empresa..."
+                  value={companySearch}
+                  onChange={(e) => setCompanySearch(e.target.value)}
+                  className="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-zinc-800 border border-black/5"
+                />
+
+                <select
+                  value={selectedCompanyCountry}
+                  onChange={(e) => setSelectedCompanyCountry(e.target.value)}
+                  className="px-2 py-1 text-xs rounded-lg bg-white dark:bg-zinc-800 border border-black/5"
+                >
+                  <option value="all">Todos los Países</option>
+                  <option value="Chile">🇨🇱 Chile</option>
+                  <option value="Internacional">🌍 Internacional</option>
+                </select>
+
+                <select
+                  value={selectedCompanyIndustry}
+                  onChange={(e) => setSelectedCompanyIndustry(e.target.value)}
+                  className="px-2 py-1 text-xs rounded-lg bg-white dark:bg-zinc-800 border border-black/5"
+                >
+                  <option value="all">Todas las Industrias</option>
+                  <option value="Tecnología">Tecnología & Software</option>
+                  <option value="Banca">Banca & Fintech</option>
+                  <option value="Minería">Minería & Energía</option>
+                  <option value="Retail">Retail & E-commerce</option>
+                  <option value="Telecomunicaciones">Telecomunicaciones</option>
+                  <option value="Inteligencia Artificial">IA & Big Tech</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-56 overflow-y-auto p-1">
+              {companies
+                .filter(c => {
+                  const matchSearch = !companySearch || c.name.toLowerCase().includes(companySearch.toLowerCase());
+                  const matchCountry = selectedCompanyCountry === 'all' || c.country.toLowerCase() === selectedCompanyCountry.toLowerCase();
+                  const matchIndustry = selectedCompanyIndustry === 'all' || c.industry.toLowerCase().includes(selectedCompanyIndustry.toLowerCase());
+                  return matchSearch && matchCountry && matchIndustry;
+                })
+                .slice(0, 30)
+                .map((comp) => (
+                  <div
+                    key={comp.id}
+                    className="p-2.5 rounded-xl bg-white dark:bg-zinc-800 border border-black/5 flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <span className="font-semibold text-gray-900 dark:text-white block">{comp.name}</span>
+                      <div className="flex items-center space-x-1.5 text-[10px] text-gray-500">
+                        <span>{comp.country === 'Chile' ? '🇨🇱 Chile' : '🌍 Global'}</span>
+                        <span>•</span>
+                        <span className="text-purple-600 dark:text-purple-400 font-medium">{comp.ats_platform || 'ATS Directo'}</span>
+                      </div>
+                    </div>
+
+                    {comp.careers_url && (
+                      <a
+                        href={comp.careers_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-1 rounded-lg text-blue-600 hover:bg-blue-50 dark:hover:bg-zinc-700 transition"
+                        title={`Ir al portal de empleo de ${comp.name}`}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
 
         {/* Search Input, Filters & Scope selector */}
         <div className="space-y-3 pt-2">

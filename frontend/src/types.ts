@@ -39,6 +39,39 @@ export interface CandidateProfile {
   updated_at?: string;
 }
 
+export interface CompanyDirectoryItem {
+  id: string;
+  name: string;
+  country: string;
+  industry: string;
+  ats_platform?: string;
+  careers_url?: string;
+  website?: string;
+  verified: boolean;
+}
+
+export interface RoleRecommendation {
+  id: string;
+  role_family: string;
+  suggested_titles: string[];
+  recommendation_type: 'direct' | 'transferable' | 'exploratory';
+  reasoning: string;
+  matching_skills: string[];
+  identified_gaps: string[];
+  seniority: string;
+  approved_by_user?: boolean | null;
+  created_at: string;
+}
+
+export interface GeneratedATSQuery {
+  id: string;
+  query_text: string;
+  target_platform: string;
+  role_family: string;
+  category: string;
+  approved: boolean;
+}
+
 export interface UserPreferences {
   target_roles: string[];
   preferred_locations: string[];

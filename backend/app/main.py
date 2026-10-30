@@ -24,6 +24,11 @@ from app.scrapers.remote_boards import RemoteBoardsScraper
 from app.scrapers.linkedin_guest import LinkedInGuestScraper
 from app.scrapers.url_parser import extract_job_from_url
 from app.scrapers.chile_portals import ChilePortalsScraper
+from app.scrapers.ats_scraper import ats_scraper
+from app.agents.role_recommender import role_recommender
+from app.models.schemas import (
+    CompanyDirectoryItem, RoleRecommendation, GeneratedATSQuery
+)
 
 app = FastAPI(title="NexusJob AI API", version=settings.VERSION)
 
@@ -77,6 +82,56 @@ def record_feedback(event: FeedbackAction):
     updated_prefs = preference_learner.process_feedback(event)
     return {"status": "success", "learned_insights": updated_prefs.auto_learned_insights}
 
+# --- Companies Directory & ATS Endpoints ---
+
+@app.get("/api/companies", response_model=List[CompanyDirectoryItem])
+def list_companies(country: Optional[str] = None, industry: Optional[str] = None):
+    return db.get_companies(country=country, industry=industry)
+
+@app.get("/api/roles/recommendations", response_model=List[RoleRecommendation])
+def get_role_recommendations(force_refresh: bool = False):
+    existing = db.get_role_recommendations()
+    if existing and not force_refresh:
+        return existing
+    profile = db.get_profile()
+    prefs = db.get_preferences()
+    recs = role_recommender.recommend_roles(profile, prefs)
+    db.save_role_recommendations(recs)
+    return recs
+
+@app.post("/api/roles/recommendations/{rec_id}/status", response_model=RoleRecommendation)
+def update_role_rec_status(rec_id: str, data: dict):
+    approved = data.get("approved", True)
+    updated = db.update_role_recommendation_status(rec_id, approved=approved)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Recomendación no encontrada")
+    return updated
+
+@app.get("/api/roles/ats-queries", response_model=List[GeneratedATSQuery])
+def get_ats_queries():
+    profile = db.get_profile()
+    prefs = db.get_preferences()
+    recs = db.get_role_recommendations()
+    if not recs:
+        recs = role_recommender.recommend_roles(profile, prefs)
+        db.save_role_recommendations(recs)
+    queries = role_recommender.generate_ats_queries(profile, prefs, recs)
+    return queries
+
+@app.post("/api/jobs/scrape-query")
+def scrape_custom_query(data: dict):
+    query = data.get("query")
+    if not query:
+        raise HTTPException(status_code=400, detail="Consulta no proporcionada")
+    jobs = ats_scraper.search(keywords=query, limit=15)
+    added = db.save_jobs(jobs)
+    return {
+        "message": f"Búsqueda ATS ejecutada: {len(jobs)} ofertas encontradas ({added} nuevas).",
+        "total_fetched": len(jobs),
+        "new_added": added,
+        "query": query
+    }
+
 # --- Jobs & Radar Endpoints ---
 
 @app.get("/api/jobs", response_model=List[JobPosting])
@@ -127,11 +182,18 @@ def trigger_scrape(keywords: Optional[str] = None, remote_only: bool = True, sco
         except Exception as e:
             import logging; logging.getLogger(__name__).warning(f"Chile portals error: {e}")
 
+    # ── Direct ATS Corporate Scraper (Workday, Greenhouse, Lever, Ashby) ──
+    try:
+        ats_jobs = ats_scraper.search(keywords=kw, remote_only=remote_only, limit=15)
+        jobs.extend(ats_jobs)
+    except Exception as e:
+        import logging; logging.getLogger(__name__).warning(f"ATS direct error: {e}")
+
     added = db.save_jobs(jobs)
     scope_labels = {
-        "global": "portales internacionales remotos",
-        "chile": "portales chilenos (GetOnBoard, LinkedIn Chile, CompuTrabajo, ChileTrabajos, Laborum)",
-        "all": "portales globales + chilenos"
+        "global": "portales internacionales remotos + ATS",
+        "chile": "portales chilenos + ATS Corporativo",
+        "all": "portales globales + chilenos + ATS Corporativo"
     }
     return {
         "message": f"Radar actualizado — {scope_labels.get(scope, scope)}: {len(jobs)} vacantes encontradas ({added} nuevas).",

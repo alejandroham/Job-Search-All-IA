@@ -4,7 +4,10 @@ import type {
   JobPosting,
   FitEvaluation,
   ApplicationDraft,
-  LLMSettings
+  LLMSettings,
+  CompanyDirectoryItem,
+  RoleRecommendation,
+  GeneratedATSQuery
 } from './types';
 
 const API_BASE = '/api';
@@ -156,6 +159,39 @@ export const api = {
   batchRank: async () => {
     const res = await fetch(`${API_BASE}/jobs/batch-rank`, {
       method: 'POST'
+    });
+    return res.json();
+  },
+
+  // ATS Companies & Dynamic Role Recommendations (Radar Inteligente)
+  getCompanies: async (country?: string, industry?: string): Promise<CompanyDirectoryItem[]> => {
+    const params = new URLSearchParams();
+    if (country) params.set('country', country);
+    if (industry) params.set('industry', industry);
+    const res = await fetch(`${API_BASE}/companies?${params.toString()}`);
+    return res.json();
+  },
+  getRoleRecommendations: async (forceRefresh: boolean = false): Promise<RoleRecommendation[]> => {
+    const res = await fetch(`${API_BASE}/roles/recommendations?force_refresh=${forceRefresh}`);
+    return res.json();
+  },
+  updateRoleRecStatus: async (recId: string, approved: boolean): Promise<RoleRecommendation> => {
+    const res = await fetch(`${API_BASE}/roles/recommendations/${recId}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved })
+    });
+    return res.json();
+  },
+  getATSQueries: async (): Promise<GeneratedATSQuery[]> => {
+    const res = await fetch(`${API_BASE}/roles/ats-queries`);
+    return res.json();
+  },
+  scrapeCustomATSQuery: async (query: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/jobs/scrape-query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
     });
     return res.json();
   },

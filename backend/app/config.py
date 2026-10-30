@@ -23,6 +23,8 @@ class Settings:
     APPLICATIONS_FILE: Path = DATA_DIR / "applications.json"
     FEEDBACK_FILE: Path = DATA_DIR / "feedback_events.json"
     LLM_SETTINGS_FILE: Path = DATA_DIR / "llm_settings.json"
+    COMPANIES_FILE: Path = DATA_DIR / "companies.json"
+    ROLE_RECOMMENDATIONS_FILE: Path = DATA_DIR / "role_recommendations.json"
     UPLOADS_DIR: Path = DATA_DIR / "uploads"
 
     # LLM Keys

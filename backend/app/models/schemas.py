@@ -157,6 +157,36 @@ class FitEvaluation(BaseModel):
     recommendation_summary: str
     evaluated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
+class CompanyDirectoryItem(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    country: str # "Chile" | "Internacional" | "EE.UU." | etc.
+    industry: str # "Tecnología", "Banca & Fintech", "Minería & Energía", etc.
+    ats_platform: Optional[str] = None # "Workday", "Greenhouse", "Lever", "Ashby", "SmartRecruiters", "SuccessFactors", etc.
+    careers_url: Optional[str] = None
+    website: Optional[str] = None
+    verified: bool = True
+
+class RoleRecommendation(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    role_family: str # e.g. "Liderazgo TI", "Cloud e Infraestructura", "Desarrollo Full Stack", etc.
+    suggested_titles: List[str] # ["IT Manager", "Jefe de TI", "Líder Técnico"]
+    recommendation_type: str = "direct" # "direct" (coincidencia directa), "transferable" (transferencia de habilidades), "exploratory" (exploratoria)
+    reasoning: str # Fundamento basado en evidencia del CV
+    matching_skills: List[str] = []
+    identified_gaps: List[str] = []
+    seniority: str = "Senior / Lead"
+    approved_by_user: Optional[bool] = None # None=pendiente, True=aprobada, False=descartada
+    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+class GeneratedATSQuery(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    query_text: str # e.g. site:myworkdayjobs.com ("IT Manager" OR "Jefe de TI") Chile
+    target_platform: str # "Workday", "Greenhouse", "Lever", "Ashby", "Chile General", "Global Remote"
+    role_family: str
+    category: str # "direct", "exploratory", "nacional", "internacional"
+    approved: bool = True
+
 class ApplicationDraft(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     job_id: str

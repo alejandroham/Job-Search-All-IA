@@ -5,8 +5,10 @@ from typing import List, Optional, Dict, Any
 from app.config import settings
 from app.models.schemas import (
     CandidateProfile, UserPreferences, JobPosting, 
-    FitEvaluation, ApplicationDraft, FeedbackAction, TrackingHistoryEvent
+    FitEvaluation, ApplicationDraft, FeedbackAction, TrackingHistoryEvent,
+    CompanyDirectoryItem, RoleRecommendation, GeneratedATSQuery
 )
+from app.storage.companies_seed import COMPANIES_SEED
 
 class Database:
     def __init__(self):
@@ -29,6 +31,12 @@ class Database:
 
         if not settings.FEEDBACK_FILE.exists():
             self._write_json(settings.FEEDBACK_FILE, [])
+
+        if not settings.COMPANIES_FILE.exists():
+            self._write_json(settings.COMPANIES_FILE, COMPANIES_SEED)
+
+        if not settings.ROLE_RECOMMENDATIONS_FILE.exists():
+            self._write_json(settings.ROLE_RECOMMENDATIONS_FILE, [])
 
     def _read_json(self, path: Path) -> Any:
         try:
@@ -399,5 +407,38 @@ class Database:
 
     def get_feedback_history(self) -> List[Dict[str, Any]]:
         return self._read_json(settings.FEEDBACK_FILE) or []
+
+    # Companies Directory
+    def get_companies(self, country: Optional[str] = None, industry: Optional[str] = None) -> List[CompanyDirectoryItem]:
+        raw = self._read_json(settings.COMPANIES_FILE) or []
+        items = [CompanyDirectoryItem(**item) for item in raw]
+        if country:
+            items = [c for c in items if c.country.lower() == country.lower()]
+        if industry:
+            items = [c for c in items if industry.lower() in c.industry.lower()]
+        return items
+
+    def save_companies(self, companies: List[CompanyDirectoryItem]):
+        self._write_json(settings.COMPANIES_FILE, [c.model_dump() for c in companies])
+
+    # Role Recommendations
+    def get_role_recommendations(self) -> List[RoleRecommendation]:
+        raw = self._read_json(settings.ROLE_RECOMMENDATIONS_FILE) or []
+        return [RoleRecommendation(**item) for item in raw]
+
+    def save_role_recommendations(self, recs: List[RoleRecommendation]):
+        self._write_json(settings.ROLE_RECOMMENDATIONS_FILE, [r.model_dump() for r in recs])
+
+    def update_role_recommendation_status(self, rec_id: str, approved: bool) -> Optional[RoleRecommendation]:
+        recs = self.get_role_recommendations()
+        target = None
+        for r in recs:
+            if r.id == rec_id:
+                r.approved_by_user = approved
+                target = r
+                break
+        if target:
+            self.save_role_recommendations(recs)
+        return target
 
 db = Database()

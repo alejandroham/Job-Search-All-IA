@@ -14,9 +14,22 @@ Un marco de trabajo inteligente y autónomo inspirado en [`ai-job-search`](https
   - 🟢 **Punto Verde + Modelo Activo:** IA conectada y lista para razonar.
   - 🟡 **Modo Offline Heurístico:** Operatividad inmediata sin API Key (búsqueda de empleo, navegación, seguimiento y guardado local).
 
-### 2. Radar de Ofertas Laborales (Chile & Global Remoto)
+### 2. Radar de Ofertas Laborales & Motor Inteligente ATS
 - **Maximización del Mercado en Chile:** Conectores especializados para **Get on Board Chile, CompuTrabajo Chile, ChileTrabajos, Laborum Chile y LinkedIn Chile**.
 - **Portales Globales Remotos:** Integración simultánea con **RemoteOK, Arbeitnow, Remotive y LinkedIn Global**.
+- **Directorio de Empresas Corporativas y ATS (Chile & Global):**
+  - Base de datos categorizada con más de 100 empresas líderes en Chile (Tecnología, Banca/Fintech, Minería, Energía, Retail, Telecomunicaciones) e Internacionales (Big Tech, SaaS, AI, Fintech, Remoto).
+  - Identificación directa del portal ATS corporativo (**Workday, Greenhouse, Lever, Ashby, SmartRecruiters, SuccessFactors, Taleo**).
+  - Acceso directo a portales de carrera oficiales con filtros por país e industria.
+- **Estrategia Dinámica de Roles ATS basada en CV:**
+  - En lugar de títulos fijos o búsquedas rígidas, la IA analiza el perfil real del candidato y deduce familias de cargos estratégicas:
+    - 🎯 **Coincidencia Directa (`direct`):** Roles donde existe trayectoria comprobada.
+    - 🔄 **Habilidad Transferible (`transferable`):** Roles afines de alta compatibilidad con competencias trasladables.
+    - 💡 **Oportunidad Exploratoria (`exploratory`):** Roles de proyección con requisitos específicos a validar.
+  - El usuario puede activar, pausar o descartar familias de cargos según su interés.
+- **Generador y Ejecutor de Consultas Booleanas (ATS Dorks):**
+  - Generación de operadores booleanos listos (`site:boards.greenhouse.io`, `site:jobs.lever.co`, `site:jobs.ashbyhq.com`, `site:myworkdayjobs.com`).
+  - Motor de búsqueda ATS directo que indexa ofertas reales desde portales limpios sin intermediarios ni muros de registro.
 - **Filtro de Alcance Instantáneo:** Alterna con un solo clic entre:
   - 🌐 *Todos (Chile + Global)*
   - 🇨🇱 *Solo Chile (presenciales, híbridos y remotos)*
@@ -194,13 +207,14 @@ Agrega a tu configuración MCP (`claude_desktop_config.json` o settings de tu en
 Agente busca empleo Gemini/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                  # API REST FastAPI y endpoints de tracking/history
+│   │   ├── main.py                  # API REST FastAPI, tracking, roles y endpoints ATS
 │   │   ├── config.py                # Ajustes de entorno, llaves y rutas
 │   │   ├── mcp_server.py            # Servidor MCP estándar JSON-RPC
-│   │   ├── models/schemas.py        # Modelos de datos Pydantic (JobPosting, TrackingHistoryEvent)
-│   │   ├── storage/db.py            # Persistencia segura e independiente Radar/Seguimiento
-│   │   ├── scrapers/                # Scrapers de Chile (GetOnBoard, CompuTrabajo, etc.) y Globales
-│   │   └── agents/                  # Evaluador 5D, Drafter-Reviewer, Coach y Learner
+│   │   ├── models/schemas.py        # Modelos de datos Pydantic (JobPosting, TrackingHistory, ATS)
+│   │   ├── storage/db.py            # Persistencia Radar, Seguimiento, Empresas y Roles
+│   │   ├── storage/companies_seed.py# Directorio seed de empresas líderes y portales ATS
+│   │   ├── scrapers/                # Scrapers de Chile, Globales y Motor ATS Dorks
+│   │   └── agents/                  # Evaluador 5D, Drafter, Revisor y Recomendantor de Roles ATS
 │   ├── requirements.txt
 │   └── run.py
 ├── frontend/
