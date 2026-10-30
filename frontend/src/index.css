@@ -53,6 +53,64 @@
 }
 
 /* ===================================================
+   CV & DOCUMENT SHEET PREVIEW STYLING
+   Enforces high contrast on screen (White vs Dark Paper)
+   =================================================== */
+.printable-cv {
+  border-radius: 1rem;
+}
+
+.printable-cv.paper-white {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+}
+
+.printable-cv.paper-dark {
+  background-color: #18181b !important;
+  color: #f4f4f5 !important;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+}
+
+/* ===================================================
+   FORMAL DOCUMENT TYPOGRAPHY & JUSTIFICATION RULES
+   Prevents irregular word spacing and rivers in justified text
+   =================================================== */
+.formal-justify {
+  text-align: justify !important;
+  text-align-last: left !important;
+  text-justify: inter-word !important;
+  hyphens: auto !important;
+  -webkit-hyphens: auto !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+}
+
+.formal-left {
+  text-align: left !important;
+  text-align-last: left !important;
+  word-break: normal !important;
+}
+
+/* Bullets in formal documents must always remain left-aligned */
+.printable-cv ul,
+.printable-cv li {
+  text-align: left !important;
+  text-align-last: left !important;
+}
+
+/* Subtle hairline divider */
+.printable-cv hr {
+  margin: 1rem 0;
+  border: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.dark .printable-cv hr {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ===================================================
    PRINT OPTIMIZATION: PRINTS ONLY THE CLEAN CV / PDF
    Hides all UI, navigation, buttons, and sidebars
    =================================================== */

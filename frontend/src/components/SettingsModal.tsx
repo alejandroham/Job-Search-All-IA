@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { LLMSettings } from '../types';
 import { api } from '../api';
+import { useToast } from './Toast';
 
 interface ModelOption {
   id: string;
@@ -26,39 +27,32 @@ interface ModelOption {
 const PROVIDER_MODELS: Record<'gemini' | 'openai' | 'claude', ModelOption[]> = {
   gemini: [
     {
-      id: 'gemini-2.5-flash',
-      name: 'Gemini 2.5 Flash',
-      tag: 'Recomendado',
+      id: 'gemini-3.5-flash',
+      name: 'Gemini 3.5 Flash',
+      tag: 'Recomendado Estable',
       status: 'recommended',
-      description: 'Modelo oficial 2026 de última generación: ultra rápido, multimodal y de alta precisión.'
+      description: 'Modelo oficial de alta disponibilidad y 1M tokens de contexto. Cero problemas de saturación o demanda.'
     },
     {
-      id: 'gemini-2.5-pro',
-      name: 'Gemini 2.5 Pro',
-      tag: 'Máxima Capacidad',
+      id: 'gemini-3.5-flash-lite',
+      name: 'Gemini 3.5 Flash Lite',
+      tag: 'Ultra Rápido',
       status: 'active',
-      description: 'Razonamiento complejo avanzado. Ideal para auditoría profunda de CV y simulación técnica de entrevistas.'
+      description: 'Velocidad de respuesta instantánea para análisis de CV y generación de documentos.'
     },
     {
-      id: 'gemini-2.0-flash',
-      name: 'Gemini 2.0 Flash',
-      tag: 'Estable & Veloz',
+      id: 'gemini-3.1-flash-lite',
+      name: 'Gemini 3.1 Flash Lite',
+      tag: 'Estable & Ligero',
       status: 'active',
-      description: 'Generación con baja latencia y excelente balance costo/rendimiento.'
+      description: 'Modelo ligero altamente eficiente con cuota completa en el plan estándar.'
     },
     {
-      id: 'gemini-1.5-flash',
-      name: 'Gemini 1.5 Flash',
-      tag: 'Contexto Extenso',
+      id: 'gemini-3.8-flash',
+      name: 'Gemini 3.8 Flash',
+      tag: 'Última Generación',
       status: 'active',
-      description: 'Ventana de 1M de tokens para procesar historiales laborales extensos.'
-    },
-    {
-      id: 'gemini-1.5-pro',
-      name: 'Gemini 1.5 Pro',
-      tag: 'Analítico 2M',
-      status: 'active',
-      description: 'Contexto extendido de 2M de tokens para evaluaciones minuciosas.'
+      description: 'Modelo más reciente de Google (puede presentar picos ocasionales de alta demanda global).'
     }
   ],
   openai: [
@@ -136,6 +130,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onSettingsUpdated
 }) => {
+  const toast = useToast();
   const [provider, setProvider] = useState<'gemini' | 'openai' | 'claude'>(settings.provider || 'gemini');
   const [apiKey, setApiKey] = useState('');
   const [selectedModel, setSelectedModel] = useState<string>('');
@@ -145,7 +140,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const getCurrentDefaultModel = (p: 'gemini' | 'openai' | 'claude'): string => {
-    if (p === 'gemini') return settings.gemini_model || 'gemini-2.5-flash';
+    if (p === 'gemini') return settings.gemini_model || 'gemini-3.5-flash';
     if (p === 'openai') return settings.openai_model || 'gpt-4o';
     return settings.claude_model || 'claude-3-5-sonnet-20241022';
   };
@@ -233,19 +228,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       const updated = await api.getSettings();
       onSettingsUpdated(updated);
       setSavedSuccess(true);
+      toast.success('Configuración de IA guardada');
       setTimeout(() => {
         setSavedSuccess(false);
         onClose();
-      }, 1200);
-    } catch (e) {
-      alert('Error guardando configuración: ' + e);
+      }, 1000);
+    } catch (e: any) {
+      toast.error('Error guardando configuración: ' + (e?.message || e));
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleClearKey = async () => {
-    if (!window.confirm(`¿Deseas borrar la clave de ${provider.toUpperCase()} y volver a Modo Offline Heurístico?`)) return;
     try {
       localStorage.removeItem(`job_search_llm_key_${provider}`);
       setApiKey('');
@@ -256,8 +251,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       });
       const updated = await api.getSettings();
       onSettingsUpdated(updated);
-    } catch (e) {
-      alert('Error al borrar la clave: ' + e);
+      toast.info(`Clave de ${provider.toUpperCase()} borrada. Modo Offline Heurístico activo.`);
+    } catch (e: any) {
+      toast.error('Error al borrar la clave: ' + (e?.message || e));
     }
   };
 

@@ -121,7 +121,7 @@ def deterministic_cv_parser(text: str) -> CandidateProfile:
 
     # Experiences extraction
     experiences: List[WorkExperience] = []
-    exp_match = re.search(r'Experiencia Laboral\s*(.*?)(?=Formación Académica|Educación|$)', text, re.DOTALL | re.I)
+    exp_match = re.search(r'(?:Experiencia Laboral|Experiencia|Experience|Historial Profesional)\s*(.*?)(?=Formación Académica|Educación|Education|Idiomas|Languages|Certificaciones|$)', text, re.DOTALL | re.I)
     if exp_match:
         exp_block = exp_match.group(1).strip()
         # Split by known common role names or major boundaries
@@ -153,11 +153,25 @@ def deterministic_cv_parser(text: str) -> CandidateProfile:
                 role = role_company
                 company = "Empresa"
 
+            # Clean and properly split start and end dates
+            s_date = dates or "Periodo registrado"
+            e_date = ""
+            if dates:
+                d_clean = dates.replace('', '-').replace('?', '-').strip()
+                for sep in ['–', '—', ' - ', '-', ' a ', ' al ']:
+                    if sep in d_clean:
+                        parts = d_clean.split(sep, 1)
+                        s_date = parts[0].strip()
+                        e_date = parts[1].strip()
+                        break
+                if not e_date and ("presente" in d_clean.lower() or "actualidad" in d_clean.lower()):
+                    e_date = "Presente"
+
             experiences.append(WorkExperience(
                 company=company,
                 role=role,
-                start_date=dates or "Periodo registrado",
-                end_date="Presente" if "presente" in dates.lower() or "2026" in dates else "",
+                start_date=s_date,
+                end_date=e_date,
                 location=job_loc,
                 is_remote="remot" in c.lower(),
                 description=f"Gestión y desarrollo técnico en {company}.",
@@ -167,7 +181,7 @@ def deterministic_cv_parser(text: str) -> CandidateProfile:
 
     # Education extraction
     education: List[EducationItem] = []
-    edu_match = re.search(r'(?:Formación Académica|Educación)\s*(.*?)(?=Idiomas|$)', text, re.DOTALL | re.I)
+    edu_match = re.search(r'(?:Formación Académica|Educación|Education)\s*(.*?)(?=Idiomas|Languages|Certificaciones|$)', text, re.DOTALL | re.I)
     if edu_match:
         edu_block = edu_match.group(1).strip()
         for edu_c in re.split(r'[●•]', edu_block):
@@ -217,7 +231,7 @@ def deterministic_cv_parser(text: str) -> CandidateProfile:
         raw_cv_text=text
     )
 
-def analyze_cv_content(raw_text: str) -> CandidateProfile:
+def analyze_cv_content(raw_text: str, save_to_db: bool = True) -> CandidateProfile:
     """
     Parses CV using LLM if configured; otherwise uses deterministic_cv_parser
     to guarantee 100% fidelity with the candidate's actual text.
@@ -233,7 +247,7 @@ def analyze_cv_content(raw_text: str) -> CandidateProfile:
         )
 
         prompt = f"""
-Analiza el siguiente currículum y extrae la información en un formato JSON exacto:
+Analiza el siguiente currículum (puede ser un documento extenso de varias páginas o una exportación oficial de LinkedIn) y extrae TODOS los empleos, funciones, logros y grados académicos en un formato JSON exacto:
 {{
   "name": "Nombre completo",
   "email": "correo",
@@ -255,7 +269,7 @@ Analiza el siguiente currículum y extrae la información en un formato JSON exa
       "end_date": "Fecha fin o Presente",
       "location": "Ubicación",
       "is_remote": false,
-      "description": "Descripción",
+      "description": "Descripción de responsabilidades",
       "technologies": ["Tech1"],
       "bullet_achievements": ["Logro 1", "Logro 2"]
     }}
@@ -272,7 +286,7 @@ Analiza el siguiente currículum y extrae la información en un formato JSON exa
 
 TEXTO DEL CURRÍCULUM:
 ---
-{raw_text[:12000]}
+{raw_text[:65000]}
 ---
 """
         try:
@@ -299,12 +313,94 @@ TEXTO DEL CURRÍCULUM:
                     certifications=result.get("certifications", []),
                     raw_cv_text=raw_text
                 )
-                db.save_profile(profile)
+                if save_to_db:
+                    db.save_profile(profile)
                 return profile
         except Exception as e:
             logger.warning(f"LLM parsing failed, falling back to deterministic parser: {e}")
 
     # Deterministic parser: extracts the REAL data directly from the candidate's CV text
     profile = deterministic_cv_parser(raw_text)
-    db.save_profile(profile)
+    if save_to_db:
+        db.save_profile(profile)
     return profile
+
+def assist_profile_content(section: str, action: str, current_text: str, target_role: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Assists candidate in refining profile text (headline, summary, achievement bullets)
+    without inventing unverifiable facts or hallucinating qualifications.
+    """
+    has_key = bool(settings.GEMINI_API_KEY or settings.OPENAI_API_KEY or settings.ANTHROPIC_API_KEY)
+    
+    if has_key:
+        system_prompt = (
+            "Eres un consultor de carrera y redactor experto de currículums técnicos de alto impacto. "
+            "Tu misión es optimizar la redacción, claridad, tono y presentación del texto profesional del usuario. "
+            "REGLAS CRÍTICAS DE CONFIABILIDAD: "
+            "1. NO inventes empresas, títulos, tecnologías ni certificaciones que no figuren en el texto. "
+            "2. Estructura los logros con verbos de acción y enfoque en resultados verificables. "
+            "3. Devuelve SIEMPRE un JSON con: {'original': str, 'suggestion': str, 'reasoning': str}."
+        )
+
+        role_clause = f" para orientarlo al cargo objetivo '{target_role}'" if target_role else ""
+        prompt = f"""
+Sección: {section}
+Acción requerida: {action}{role_clause}
+Texto actual del usuario:
+\"\"\"{current_text}\"\"\"
+
+Optimiza el texto según las mejores prácticas de reclutamiento tecnológico y ATS.
+Devuelve el resultado en JSON:
+{{
+  "original": "{current_text}",
+  "suggestion": "Texto mejorado optimizado...",
+  "reasoning": "Explicación breve de por qué este cambio potencia el perfil..."
+}}
+"""
+        try:
+            result = llm.generate_json(prompt, system_instruction=system_prompt)
+            if result and "suggestion" in result:
+                return {
+                    "original": current_text,
+                    "suggestion": result.get("suggestion", current_text),
+                    "reasoning": result.get("reasoning", "Mejora de redacción y claridad técnica.")
+                }
+        except Exception as e:
+            logger.warning(f"LLM assist failed, falling back to heuristic assistant: {e}")
+
+    # Heuristic fallback if LLM is offline or fails
+    suggestion = current_text.strip()
+    reasoning = "Optimización estructural heurística sin falsear datos."
+
+    if section == "headline":
+        if action == "shorten":
+            parts = [p.strip() for p in current_text.split('|')]
+            suggestion = " | ".join(parts[:3]) if len(parts) > 3 else current_text
+            reasoning = "Se sintetizó el titular en los 3 pilares clave para máxima legibilidad."
+        else:
+            if target_role and target_role.lower() not in current_text.lower():
+                suggestion = f"{target_role} | {current_text}"
+                reasoning = f"Se priorizó el cargo objetivo '{target_role}' al inicio del titular profesional."
+            else:
+                suggestion = current_text.replace("  ", " ").strip()
+                reasoning = "Titular pulido y equilibrado para captar atención en 5 segundos."
+
+    elif section == "summary":
+        if action == "shorten":
+            sentences = current_text.split('. ')
+            suggestion = ". ".join(sentences[:3]) + ("." if not sentences[2].endswith('.') else "")
+            reasoning = "Resumen condensado en 3 oraciones de alto impacto (Elevator Pitch)."
+        else:
+            suggestion = current_text.strip()
+            reasoning = "Perfil profesional verificado y estructurado con énfasis en trayectoria demostrable."
+
+    elif section == "experience_bullet":
+        if not re.match(r'^(Lideró|Diseñó|Implementó|Optimizó|Desarrolló|Administró|Automatizó|Gestionó)', current_text, re.I):
+            suggestion = f"Implementó y optimizó: {current_text}"
+            reasoning = "Se inició con un verbo de acción técnica directo para mayor impacto en evaluación ATS."
+
+    return {
+        "original": current_text,
+        "suggestion": suggestion,
+        "reasoning": reasoning
+    }

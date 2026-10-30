@@ -1,5 +1,8 @@
 import os
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 from typing import Optional, List
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +16,7 @@ from app.models.schemas import (
     OutcomeSubmission, UpskillPlan
 )
 from app.storage.db import db
-from app.agents.profile_analyzer import extract_text_from_file, analyze_cv_content
+from app.agents.profile_analyzer import extract_text_from_file, analyze_cv_content, assist_profile_content
 from app.agents.fit_evaluator import fit_evaluator
 from app.agents.drafter_reviewer import drafter_reviewer
 from app.agents.preference_learner import preference_learner
@@ -66,6 +69,74 @@ async def upload_cv(file: UploadFile = File(...)):
     profile = analyze_cv_content(text)
     return {"message": "CV analizado exitosamente", "profile": profile}
 
+@app.post("/api/profile/extract-preview")
+async def extract_profile_preview(file: UploadFile = File(...)):
+    file_path = settings.UPLOADS_DIR / file.filename
+    content = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    text = extract_text_from_file(file_path)
+    if not text:
+        raise HTTPException(status_code=400, detail="No se pudo extraer texto del archivo subido.")
+
+    # Extract without saving to DB (requires explicit candidate review & confirmation)
+    extracted = analyze_cv_content(text, save_to_db=False)
+    return {
+        "message": "Currículum analizado para revisión previa",
+        "extracted_profile": extracted,
+        "filename": file.filename,
+        "text_length": len(text)
+    }
+
+@app.post("/api/profile/ai-assist")
+def ai_assist_profile_endpoint(data: dict):
+    section = data.get("section", "summary")
+    action = data.get("action", "improve")
+    current_text = data.get("current_text", "")
+    target_role = data.get("target_role")
+    res = assist_profile_content(section, action, current_text, target_role)
+    return res
+
+@app.post("/api/profile/import-linkedin")
+async def import_from_linkedin(
+    file: Optional[UploadFile] = File(None),
+    text: Optional[str] = Form(None),
+    linkedin_url: Optional[str] = Form(None)
+):
+    raw_text = ""
+    if file:
+        file_path = settings.UPLOADS_DIR / file.filename
+        content = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+        raw_text = extract_text_from_file(file_path)
+    elif text and text.strip():
+        raw_text = text.strip()
+    elif linkedin_url and linkedin_url.strip():
+        # Clean and use provided URL as reference
+        raw_text = f"Perfil de LinkedIn: {linkedin_url.strip()}"
+
+    if not raw_text:
+        raise HTTPException(
+            status_code=400,
+            detail="Por favor sube el PDF de tu perfil de LinkedIn ('Guardar como PDF') o pega el texto de tu experiencia."
+        )
+
+    # Extract without overwriting DB directly (guarantees preview review before confirm)
+    extracted = analyze_cv_content(raw_text, save_to_db=False)
+    if linkedin_url and not extracted.linkedin_url:
+        extracted.linkedin_url = linkedin_url.strip()
+
+    return {
+        "message": "Datos de LinkedIn extraídos exitosamente para revisión",
+        "extracted_profile": extracted,
+        "profile": extracted,
+        "experiences_count": len(extracted.experiences or []),
+        "education_count": len(extracted.education or []),
+        "skills_count": len(extracted.technical_skills or [])
+    }
+
 # --- Preferences & Learning Endpoints ---
 
 @app.get("/api/preferences", response_model=UserPreferences)
@@ -74,6 +145,25 @@ def get_preferences():
 
 @app.put("/api/preferences", response_model=UserPreferences)
 def update_preferences(prefs: UserPreferences):
+    db.save_preferences(prefs)
+    return prefs
+
+@app.post("/api/memory/consolidate", response_model=UserPreferences)
+def consolidate_ai_memory():
+    """Triggers deep cognitive memory synthesis across CV, Applications, Radar & STAR answers"""
+    return preference_learner.consolidate_memory()
+
+@app.post("/api/memory/reset", response_model=UserPreferences)
+def reset_ai_memory():
+    """Wipes all learned memory, DNA, STAR stories and feedback history to start 100% fresh"""
+    return preference_learner.reset_memory()
+
+@app.delete("/api/memory/stories/{story_id}", response_model=UserPreferences)
+def delete_learned_star_story(story_id: str):
+    """Allows user to remove a learned STAR story from memory"""
+    prefs = db.get_preferences()
+    prefs.learned_star_stories = [s for s in prefs.learned_star_stories if s.id != story_id]
+    preference_learner._update_maturity(prefs)
     db.save_preferences(prefs)
     return prefs
 
@@ -369,9 +459,15 @@ def get_interview_prep(job_id: str):
 def evaluate_interview_answer(data: dict):
     question = data.get("question", "")
     answer = data.get("answer", "")
+    company = data.get("company", None)
     if not question or not answer:
         raise HTTPException(status_code=400, detail="Pregunta y respuesta requeridas")
-    return interview_coach.evaluate_mock_answer(question, answer)
+    eval_res = interview_coach.evaluate_mock_answer(question, answer)
+    try:
+        preference_learner.learn_from_star_answer(question, answer, eval_res, company=company)
+    except Exception as e:
+        logger.warning(f"Error auto-learning from interview answer: {e}")
+    return eval_res
 
 # --- Settings & Keys Endpoints ---
 
@@ -383,7 +479,7 @@ def get_current_settings():
 
     if provider == "gemini":
         has_active_key = bool(settings.GEMINI_API_KEY)
-        active_model_name = settings.GEMINI_MODEL or "gemini-2.5-flash"
+        active_model_name = settings.GEMINI_MODEL or "gemini-3.5-flash"
     elif provider == "openai":
         has_active_key = bool(settings.OPENAI_API_KEY)
         active_model_name = settings.OPENAI_MODEL or "gpt-4o"

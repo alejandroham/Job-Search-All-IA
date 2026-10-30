@@ -18,6 +18,27 @@ export interface EducationItem {
   graduation_year?: string;
 }
 
+export interface ProjectItem {
+  id: string;
+  name: string;
+  description: string;
+  role?: string;
+  technologies: string[];
+  url?: string;
+  repository_url?: string;
+}
+
+export interface ResumeVersion {
+  id: string;
+  name: string;
+  target_role: string;
+  headline?: string;
+  summary?: string;
+  selected_skills: string[];
+  template: 'modern' | 'classic_ats' | 'tech';
+  created_at: string;
+}
+
 export interface CandidateProfile {
   name: string;
   email?: string;
@@ -35,6 +56,8 @@ export interface CandidateProfile {
   experiences: WorkExperience[];
   education: EducationItem[];
   certifications: string[];
+  projects?: ProjectItem[];
+  versions?: ResumeVersion[];
   raw_cv_text?: string;
   updated_at?: string;
 }
@@ -72,6 +95,33 @@ export interface GeneratedATSQuery {
   approved: boolean;
 }
 
+export interface ProfileDNA {
+  summary: string;
+  seniority_level: string;
+  core_strengths: string[];
+  communication_tone: string;
+}
+
+export interface LearnedStarStory {
+  id: string;
+  title: string;
+  situation_and_task: string;
+  action: string;
+  result_and_metrics: string;
+  key_skills: string[];
+  source: string;
+  score?: number;
+  created_at?: string;
+}
+
+export interface MemoryStats {
+  cv_analyzed: boolean;
+  total_applications_learned: number;
+  total_star_answers_learned: number;
+  maturity_percentage: number;
+  last_consolidated_at?: string;
+}
+
 export interface UserPreferences {
   target_roles: string[];
   preferred_locations: string[];
@@ -80,6 +130,10 @@ export interface UserPreferences {
   preferred_technologies: string[];
   deal_breakers: string[];
   auto_learned_insights: string[];
+  profile_dna?: ProfileDNA;
+  learned_star_stories?: LearnedStarStory[];
+  industry_insights?: string[];
+  memory_stats?: MemoryStats;
   updated_at?: string;
 }
 

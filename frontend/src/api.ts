@@ -39,8 +39,59 @@ export const api = {
     }
     return res.json();
   },
+  extractCVPreview: async (file: File): Promise<{ message: string; extracted_profile: CandidateProfile; filename: string; text_length: number }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE}/profile/extract-preview`, {
+      method: 'POST',
+      body: formData
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Error al extraer información del documento');
+    }
+    return res.json();
+  },
+  aiAssistProfile: async (data: { section: string; action: string; current_text: string; target_role?: string }): Promise<{ original: string; suggestion: string; reasoning: string }> => {
+    const res = await fetch(`${API_BASE}/profile/ai-assist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      throw new Error('Error en la asistencia de IA');
+    }
+    return res.json();
+  },
+  importFromLinkedIn: async (params: { file?: File; text?: string; linkedin_url?: string }): Promise<{
+    message: string;
+    extracted_profile: CandidateProfile;
+    profile: CandidateProfile;
+    experiences_count: number;
+    education_count: number;
+    skills_count: number;
+  }> => {
+    const formData = new FormData();
+    if (params.file) formData.append('file', params.file);
+    if (params.text) formData.append('text', params.text);
+    if (params.linkedin_url) formData.append('linkedin_url', params.linkedin_url);
 
-  // Preferences
+    const res = await fetch(`${API_BASE}/profile/import-linkedin`, {
+      method: 'POST',
+      body: formData
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Error importando desde LinkedIn');
+    }
+    const data = await res.json();
+    return {
+      ...data,
+      profile: data.profile || data.extracted_profile
+    };
+  },
+
+  // Preferences & Cognitive AI Memory
   getPreferences: async (): Promise<UserPreferences> => {
     const res = await fetch(`${API_BASE}/preferences`);
     return res.json();
@@ -51,6 +102,27 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(prefs)
     });
+    return res.json();
+  },
+  consolidateMemory: async (): Promise<UserPreferences> => {
+    const res = await fetch(`${API_BASE}/memory/consolidate`, {
+      method: 'POST'
+    });
+    if (!res.ok) throw new Error('Error al consolidar la memoria con IA');
+    return res.json();
+  },
+  deleteLearnedStarStory: async (storyId: string): Promise<UserPreferences> => {
+    const res = await fetch(`${API_BASE}/memory/stories/${storyId}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) throw new Error('Error al eliminar la historia de la memoria');
+    return res.json();
+  },
+  resetMemory: async (): Promise<UserPreferences> => {
+    const res = await fetch(`${API_BASE}/memory/reset`, {
+      method: 'POST'
+    });
+    if (!res.ok) throw new Error('Error al reiniciar la memoria IA');
     return res.json();
   },
   sendFeedback: async (job_id: string, action: 'like' | 'dislike' | 'apply' | 'reject', notes?: string) => {
@@ -224,11 +296,11 @@ export const api = {
     });
     return res.json();
   },
-  evaluateInterviewAnswer: async (question: string, answer: string) => {
+  evaluateInterviewAnswer: async (question: string, answer: string, company?: string) => {
     const res = await fetch(`${API_BASE}/interview/evaluate-answer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, answer })
+      body: JSON.stringify({ question, answer, company })
     });
     return res.json();
   },

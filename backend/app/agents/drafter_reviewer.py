@@ -35,10 +35,22 @@ class DrafterReviewerPipeline:
         return draft
 
     def _draft_materials(self, job: JobPosting, profile: CandidateProfile) -> Tuple[str, str]:
+        prefs = db.get_preferences()
+        memory_context = ""
+        if prefs.learned_star_stories:
+            top_stories = [
+                f"- {s.title}: {s.situation_and_task} -> {s.action} -> Resultado métrico: {s.result_and_metrics}"
+                for s in prefs.learned_star_stories[:4]
+            ]
+            memory_context += "\nHISTORIAS DE ÉXITO STAR VERIFICADAS DEL CANDIDATO (Utiliza estos logros reales en la carta y viñetas del CV):\n" + "\n".join(top_stories) + "\n"
+        if prefs.profile_dna:
+            memory_context += f"\nADN Y TONO PROFESIONAL APRENDIDO:\n- Tono: {prefs.profile_dna.communication_tone}\n- Propuesta de valor: {prefs.profile_dna.summary}\n- Seniority inferido: {prefs.profile_dna.seniority_level}\n"
+
         system_instruction = (
             "Eres el mejor redactor de currículums técnicos y cartas de presentación del mundo para vacantes internacionales. "
             "REGLA DE ORO DE INTEGRIDAD: NUNCA inventes experiencia, títulos, empresas ni tecnologías que no existan en el perfil del candidato. "
-            "Tu tarea es REORDENAR, ENFATIZAR y CONTEXTUALIZAR los logros y proyectos reales del candidato para resaltar la máxima relevancia hacia la vacante objetivo."
+            "Tu tarea es REORDENAR, ENFATIZAR y CONTEXTUALIZAR los logros y proyectos reales del candidato para resaltar la máxima relevancia hacia la vacante objetivo. "
+            "Aprovecha las historias STAR reales aprendidas de su memoria para enriquecer la persuasión con métricas auténticas."
         )
 
         prompt = f"""
@@ -51,13 +63,13 @@ Descripción:
 
 PERFIL REAL Y VERIFICADO DEL CANDIDATO:
 {json.dumps(profile.model_dump(), ensure_ascii=False, indent=2)}
-
+{memory_context}
 INSTRUCCIONES DE REDACCIÓN:
 1. Adapta el Currículum en formato Markdown limpio, estructurado con:
    - Encabezado con datos del candidato
    - Perfil profesional enfocado al rol
    - Habilidades clave relevantes primero
-   - Experiencia laboral con viñetas de logros orientadas al impacto (métricas, tecnologías empleadas)
+   - Experiencia laboral con viñetas de logros orientadas al impacto (métricas, tecnologías empleadas). REGLAS ESTRICTAS DE FORMATO: Usa SIEMPRE guiones '- ' para las viñetas, NUNCA asteriscos '* '. NO insertes separadores '---' entre secciones. No dejes asteriscos ni símbolos sueltos.
    - Educación y certificaciones
 2. Redacta una Carta de Presentación moderna (3 a 4 párrafos concisos):
    - Prohibido usar clichés vacíos como "Me dirijo a ustedes para expresar mi entusiasmo...".
@@ -133,7 +145,7 @@ RESPONDE EN JSON:
             md += f"{exp.description}\n"
             for b in exp.bullet_achievements:
                 md += f"- {b}\n"
-            md += f"*Tecnologías:* {', '.join(exp.technologies)}\n\n"
+            md += f"**Tecnologías:** {', '.join(exp.technologies)}\n\n"
         md += "## Educación\n"
         for edu in profile.education:
             md += f"- **{edu.degree} en {edu.field_of_study}**, {edu.institution} ({edu.graduation_year or ''})\n"

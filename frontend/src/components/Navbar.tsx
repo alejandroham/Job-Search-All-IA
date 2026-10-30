@@ -19,13 +19,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   openSettings,
   llmSettings
 }) => {
-  // Tabs without icons for clean, spacious Apple navigation
+  // Clean, spacious Apple navigation (Applications & Interview Coach unified inside Tracker)
   const tabs = [
     { id: 'radar', label: 'Radar de Empleo' },
-    { id: 'tracker', label: 'Seguimiento' },
+    { id: 'tracker', label: 'Mis Postulaciones' },
     { id: 'profile', label: 'Perfil & CV' },
-    { id: 'applications', label: 'Postulaciones' },
-    { id: 'interview', label: 'Coach' },
     { id: 'preferences', label: 'Memoria IA' },
   ];
 

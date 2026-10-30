@@ -33,7 +33,7 @@ class Settings:
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     
     DEFAULT_PROVIDER: str = os.getenv("DEFAULT_PROVIDER", "gemini") # "gemini", "openai", "claude"
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o")
     CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
 
@@ -55,7 +55,11 @@ class Settings:
                     if data.get("provider"):
                         self.DEFAULT_PROVIDER = data["provider"]
                     if data.get("gemini_model"):
-                        self.GEMINI_MODEL = data["gemini_model"]
+                        model = data["gemini_model"]
+                        # Auto-upgrade deprecated models
+                        if model in ["gemini-2.5-flash", "models/gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
+                            model = "gemini-3.5-flash"
+                        self.GEMINI_MODEL = model
                     if data.get("openai_model"):
                         self.OPENAI_MODEL = data["openai_model"]
                     if data.get("claude_model"):

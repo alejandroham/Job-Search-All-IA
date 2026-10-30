@@ -48,21 +48,44 @@ class UnifiedLLMProvider:
         if prov == "gemini":
             api_key = settings.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY", "")
             if api_key and self._gemini_client:
-                try:
-                    contents = prompt
-                    config = {}
-                    if system_instruction:
-                        config["system_instruction"] = system_instruction
-                    
-                    response = self._gemini_client.models.generate_content(
-                        model=settings.GEMINI_MODEL,
-                        contents=contents,
-                        config=config if config else None
-                    )
-                    return response.text
-                except Exception as e:
-                    logger.error(f"Error calling Gemini: {e}")
-                    # fallback to heuristic if failed
+                import time
+                primary_model = settings.GEMINI_MODEL or "gemini-3.5-flash"
+                if primary_model in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
+                    primary_model = "gemini-3.5-flash"
+
+                # Resilience chain with verified active models
+                models_to_try = [primary_model]
+                for candidate in ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"]:
+                    if candidate not in models_to_try:
+                        models_to_try.append(candidate)
+
+                last_err = None
+                for candidate_model in models_to_try:
+                    try:
+                        contents = prompt
+                        config = {}
+                        if system_instruction:
+                            config["system_instruction"] = system_instruction
+                        
+                        response = self._gemini_client.models.generate_content(
+                            model=candidate_model,
+                            contents=contents,
+                            config=config if config else None
+                        )
+                        if response and response.text:
+                            if settings.GEMINI_MODEL != candidate_model:
+                                settings.GEMINI_MODEL = candidate_model
+                                settings.save_persisted_llm_settings()
+                            return response.text
+                    except Exception as e:
+                        last_err = e
+                        err_str = str(e)
+                        logger.warning(f"Error calling Gemini model '{candidate_model}': {err_str}. Trying fallback...")
+                        if "503" in err_str or "UNAVAILABLE" in err_str or "high demand" in err_str:
+                            time.sleep(1.0)
+
+                logger.error(f"All Gemini models in fallback chain failed. Last error: {last_err}")
+                # fallback to heuristic if failed
 
         # 2. OpenAI
         elif prov == "openai":

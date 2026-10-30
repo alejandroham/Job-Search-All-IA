@@ -38,8 +38,38 @@ class CandidateProfile(BaseModel):
     experiences: List[WorkExperience] = []
     education: List[EducationItem] = []
     certifications: List[str] = []
+    projects: List[Dict[str, Any]] = []
+    versions: List[Dict[str, Any]] = []
     raw_cv_text: Optional[str] = None
     updated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+class ProfileDNA(BaseModel):
+    summary: str = "Profesional de tecnología enfocado en soluciones escalables e ingeniería de software moderna."
+    seniority_level: str = "Senior / Lead"
+    core_strengths: List[str] = [
+        "Arquitectura de software y backend resiliente",
+        "Integración de modelos de Inteligencia Artificial",
+        "Liderazgo técnico y entrega ágil"
+    ]
+    communication_tone: str = "Técnico-ejecutivo con orientación a resultados medibles"
+
+class LearnedStarStory(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str = "Optimización de rendimiento y arquitectura"
+    situation_and_task: str = ""
+    action: str = ""
+    result_and_metrics: str = ""
+    key_skills: List[str] = []
+    source: str = "cv" # "cv", "interview_simulation", "user_added"
+    score: Optional[int] = None
+    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+class MemoryStats(BaseModel):
+    cv_analyzed: bool = True
+    total_applications_learned: int = 0
+    total_star_answers_learned: int = 0
+    maturity_percentage: int = 65
+    last_consolidated_at: Optional[str] = None
 
 class UserPreferences(BaseModel):
     target_roles: List[str] = ["Software Engineer", "AI Engineer", "Full Stack Developer", "Data Scientist"]
@@ -53,6 +83,13 @@ class UserPreferences(BaseModel):
         "Empresas de apuestas no reguladas o esquemas dudosos"
     ]
     auto_learned_insights: List[str] = []
+    
+    # Cognitive Agentic Memory
+    profile_dna: Optional[ProfileDNA] = Field(default_factory=ProfileDNA)
+    learned_star_stories: List[LearnedStarStory] = []
+    industry_insights: List[str] = []
+    memory_stats: Optional[MemoryStats] = Field(default_factory=MemoryStats)
+
     updated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 class TrackingHistoryEvent(BaseModel):
